@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/* Custom Select Styling - Override ALL browser defaults */
+select {
+  accent-color: #F87819 !important;
+}
+
+select option {
+  padding: 12px !important;
+  background-color: white !important;
+  color: #111827 !important;
+  font-weight: 500 !important;
+}
+
+/* Override default highlight - Use orange instead of blue */
+select option:hover,
+select option:focus,
+select option:active,
+select option[selected],
+select option:checked {
+  background: linear-gradient(to right, #F87819, #ff8c3a) !important;
+  background-color: #F87819 !important;
+  color: white !important;
+  outline: none !important;
+}
+
+select:focus option:hover,
+select:focus option:focus,
+select:focus option:active,
+select:focus option:checked,
+select:focus option[selected] {
+  background: linear-gradient(to right, #F87819, #ff8c3a) !important;
+  background-color: #F87819 !important;
+  color: white !important;
+}
+
+/* Remove default outlines */
+select:focus {
+  outline: none !important;
+}
+
+select:focus-visible {
+  outline: none !important;
+}
+
+/* Windows/Chrome specific */
+select option:hover:not(:disabled) {
+  background-color: #F87819 !important;
+  background: linear-gradient(to right, #F87819, #ff8c3a) !important;
+  color: white !important;
+}
+
+/* Firefox specific */
+@-moz-document url-prefix() {
+  select option:hover,
+  select option:focus,
+  select option:checked {
+    background-color: #F87819 !important;
+    color: white !important;
+  }
+}
+
+/* Safari/Webkit specific */
+@supports (-webkit-appearance: none) {
+  select option:hover,
+  select option:focus,
+  select option:checked {
+    background: #F87819 !important;
+    color: white !important;
+  }
+}
+
+/* Edge specific */
+@supports (-ms-ime-align: auto) {
+  select option:hover,
+  select option:focus,
+  select option:checked {
+    background-color: #F87819 !important;
+    color: white !important;
+  }
+}

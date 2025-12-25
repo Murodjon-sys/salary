@@ -1,87 +1,51 @@
-# Welcome to React Router!
+# Oylik Hisoblash Tizimi
 
-A modern, production-ready template for building full-stack React applications using React Router.
+Do'kon va filiallar uchun xodimlarning oyligini hisoblash tizimi.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+## Xususiyatlar
 
-## Features
+- ✅ 3 ta filial: Asosiy Sklad, G'ijduvon Filial, Navoiy Filial
+- ✅ Xodimlar ma'lumotlarini boshqarish
+- ✅ Lavozimlar: Ishchi, Manager, Kassir, Shofir
+- ✅ Umumiy savdodan foiz asosida oylik hisoblash
+- ✅ Zamonaviy va responsive dizayn
+- ✅ Real-time hisoblash
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
-
-## Getting Started
-
-### Installation
-
-Install the dependencies:
+## Ishga tushirish
 
 ```bash
-npm install
-```
+# Loyihaga kirish
+cd salary-management
 
-### Development
-
-Start the development server with HMR:
-
-```bash
+# Development server'ni ishga tushirish
 npm run dev
 ```
 
-Your application will be available at `http://localhost:5173`.
+Brauzerda `http://localhost:5173` manzilini oching.
 
-## Building for Production
+## Foydalanish
 
-Create a production build:
+1. **Filial tanlash**: Chap tarafdagi sidebar'dan kerakli filialni tanlang
+2. **Savdo kiritish**: Umumiy savdo summasini kiriting
+3. **Xodim qo'shish**: "Xodim Qo'shish" tugmasini bosing va ma'lumotlarni to'ldiring
+4. **Oylik ko'rish**: Har bir xodimning oyligi avtomatik hisoblanadi
+
+## Texnologiyalar
+
+- React 19
+- React Router v7
+- TypeScript
+- Tailwind CSS
+- Vite
+
+## Build
 
 ```bash
 npm run build
 ```
 
-## Deployment
-
-### Docker Deployment
-
-To build and run using Docker:
+## Deploy
 
 ```bash
-docker build -t my-app .
-
-# Run the container
-docker run -p 3000:3000 my-app
+npm run deploy
 ```
-
-The containerized application can be deployed to any platform that supports Docker, including:
-
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
-
-### DIY Deployment
-
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
-
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.

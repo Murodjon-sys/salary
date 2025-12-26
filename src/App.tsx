@@ -459,32 +459,17 @@ export default function App() {
     const wholesaleSalary = ((currentBranch.wholesaleSales || 0) * percentage) / 100 / 2;
     const baseSalary = retailSalary + wholesaleSalary;
     
-    // Vazifalar tekshiruvi (barcha lavozimlar uchun)
-    if (employee.dailyTasks && Object.keys(employee.dailyTasks).length > 0) {
-      // Bajarilgan vazifalar sonini hisoblaymiz
-      const completedTasks = Object.values(employee.dailyTasks).filter(task => task === true).length;
-      
-      // MUHIM: Vazifalar sonini taskTemplates dan olamiz
-      // Agar taskTemplates yuklanmagan bo'lsa, dailyTasks dan olamiz
-      const totalTasks = taskTemplates.filter(t => t.position === employee.position).length || Object.keys(employee.dailyTasks).length;
-      
-      // Bajarilmagan vazifalar soni
-      const incompleteTasks = totalTasks - completedTasks;
-      
-      // Har bir bajarilmagan vazifa uchun 10% kamayadi
-      const taskPercentage = 100 - (incompleteTasks * 10);
-      
-      // Vazifalar foizini qo'llash
-      const salary = (baseSalary * taskPercentage) / 100;
-      
-      return salary;
-    }
-    
+    // MUHIM: Boshqa lavozimlar uchun vazifalar qo'llanmaydi, faqat asosiy oylik
     return baseSalary;
   };
 
-  // Jarima summasini hisoblash (real-time) - barcha lavozimlar uchun
+  // Jarima summasini hisoblash (real-time) - FAQAT SOTUVCHILAR UCHUN
   const calculatePenalty = (employee: Employee) => {
+    // Faqat sotuvchilar uchun jarima hisoblanadi
+    if (employee.position !== 'sotuvchi') {
+      return 0;
+    }
+    
     // Agar vazifalar yo'q bo'lsa, jarima ham yo'q
     if (!employee.dailyTasks || Object.keys(employee.dailyTasks).length === 0) {
       return 0;
@@ -492,37 +477,30 @@ export default function App() {
     
     let baseSalary = 0;
     
-    if (employee.position === "sotuvchi") {
-      // Sotuvchi uchun: kunlik savdodan hisoblash
-      if (!employee.dailySales && !employee.wholesaleSales) {
-        return 0;
-      }
-      
-      // Chakana savdo (to'liq foiz)
-      const retailSales = employee.dailySales || 0;
-      const retailSalary = (retailSales * employee.percentage) / 100;
-      
-      // Optom savdo (yarim foiz)
-      const wholesaleSales = employee.wholesaleSales || 0;
-      const wholesaleSalary = (wholesaleSales * employee.percentage) / 100 / 2;
-      
-      // Jami asosiy oylik
-      baseSalary = retailSalary + wholesaleSalary;
-    } else {
-      // Boshqa xodimlar uchun: filial savdosidan hisoblash
-      const retailSalary = ((currentBranch.retailSales || 0) * employee.percentage) / 100;
-      const wholesaleSalary = ((currentBranch.wholesaleSales || 0) * employee.percentage) / 100 / 2;
-      baseSalary = retailSalary + wholesaleSalary;
+    // Sotuvchi uchun: kunlik savdodan hisoblash
+    if (!employee.dailySales && !employee.wholesaleSales) {
+      return 0;
     }
+    
+    // Chakana savdo (to'liq foiz)
+    const retailSales = employee.dailySales || 0;
+    const retailSalary = (retailSales * employee.percentage) / 100;
+    
+    // Optom savdo (yarim foiz)
+    const wholesaleSales = employee.wholesaleSales || 0;
+    const wholesaleSalary = (wholesaleSales * employee.percentage) / 100 / 2;
+    
+    // Jami asosiy oylik
+    baseSalary = retailSalary + wholesaleSalary;
     
     const actualSalary = calculateSalary(employee);
     return baseSalary - actualSalary;
   };
 
-  // Filial uchun jami jarima (real-time) - barcha xodimlar
+  // Filial uchun jami jarima (real-time) - FAQAT SOTUVCHILAR
   const calculateBranchPenalty = (branch: Branch) => {
     return branch.employees
-      .filter(emp => emp.dailyTasks && Object.keys(emp.dailyTasks).length > 0) // Faqat vazifasi bor xodimlar
+      .filter(emp => emp.position === 'sotuvchi' && emp.dailyTasks && Object.keys(emp.dailyTasks).length > 0)
       .reduce((sum, emp) => sum + calculatePenalty(emp), 0);
   };
 

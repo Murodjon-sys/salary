@@ -41,6 +41,8 @@ export default function App() {
   const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<any | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showSaveSuccessModal, setShowSaveSuccessModal] = useState(false);
+  const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showSaveErrorModal, setShowSaveErrorModal] = useState(false);
   const [showDeleteHistoryConfirm, setShowDeleteHistoryConfirm] = useState(false);
   const [historyToDelete, setHistoryToDelete] = useState<any | null>(null);
@@ -243,9 +245,18 @@ export default function App() {
 
   const updateDailySales = async () => {
     if (!selectedEmployee) return;
+    
+    // Modal'ni darhol yopamiz (UX uchun)
+    setShowSalesModal(false);
+    setSelectedEmployee(null);
+    const retailValue = dailySalesInput;
+    const wholesaleValue = wholesaleSalesInput;
+    setDailySalesInput("");
+    setWholesaleSalesInput("");
+    
     try {
-      const retailSales = parseFloat(dailySalesInput.replace(/,/g, "")) || 0;
-      const wholesaleSales = parseFloat(wholesaleSalesInput.replace(/,/g, "")) || 0;
+      const retailSales = parseFloat(retailValue.replace(/,/g, "")) || 0;
+      const wholesaleSales = parseFloat(wholesaleValue.replace(/,/g, "")) || 0;
       
       await api.updateEmployee(selectedEmployee.id, {
         name: selectedEmployee.name,
@@ -255,15 +266,11 @@ export default function App() {
         wholesaleSales: wholesaleSales
       });
       
-      setShowSalesModal(false);
-      setSelectedEmployee(null);
-      setDailySalesInput("");
-      setWholesaleSalesInput("");
-      
-      // Umumiy savdoni avtomatik yangilash (avval bu, keyin loadBranches)
+      // Umumiy savdoni avtomatik yangilash
       await updateTotalSales();
     } catch (error) {
       console.error("Savdoni yangilashda xato:", error);
+      alert('❌ Savdoni saqlashda xato yuz berdi');
     }
   };
 
@@ -434,9 +441,8 @@ export default function App() {
         // Bajarilgan vazifalar sonini hisoblaymiz
         const completedTasks = Object.values(employee.dailyTasks).filter(task => task === true).length;
         
-        // MUHIM: Vazifalar sonini taskTemplates dan olamiz (4 ta)
-        // Agar taskTemplates yuklanmagan bo'lsa, dailyTasks dan olamiz
-        const totalTasks = taskTemplates.filter(t => t.position === 'sotuvchi').length || Object.keys(employee.dailyTasks).length;
+        // MUHIM: Har bir xodimning o'z vazifalar sonini ishlatamiz
+        const totalTasks = Object.keys(employee.dailyTasks).length;
         
         // Bajarilmagan vazifalar soni
         const incompleteTasks = totalTasks - completedTasks;
@@ -538,6 +544,188 @@ export default function App() {
           </button>
         </div>
       </div>
+    );
+  }
+
+  // Landing Page - Agar login qilinmagan bo'lsa
+  if (!isAuthenticated) {
+    return (
+      <>
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex flex-col">
+          {/* Navbar */}
+          <nav className="w-full px-6 lg:px-12 py-6 border-b border-gray-800">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+              {/* Logo */}
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F87819] to-[#ff8c3a] p-0.5">
+                  <img 
+                    src="/logo.png" 
+                    alt="Logo" 
+                    className="w-full h-full rounded-xl object-cover bg-white"
+                  />
+                </div>
+                <span className="text-xl font-semibold text-white">Alibobo</span>
+              </div>
+
+              {/* Kirish tugmasi */}
+              <button
+                onClick={() => setShowLoginModal(true)}
+                className="px-6 py-2.5 rounded-lg text-sm font-medium transition-all bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white hover:shadow-lg hover:shadow-orange-500/50"
+              >
+                Kirish
+              </button>
+            </div>
+          </nav>
+
+          {/* Hero Section */}
+          <div className="flex-1 flex items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
+            <div className="max-w-6xl mx-auto w-full">
+              {/* Logo - Square & Balanced */}
+              <div className="mb-12 sm:mb-16 md:mb-20 flex justify-center">
+                <div className="w-64 h-64 sm:w-72 sm:h-72 md:w-80 md:h-80 lg:w-96 lg:h-96 xl:w-[28rem] xl:h-[28rem] rounded-3xl bg-gradient-to-br from-[#F87819] to-[#ff8c3a] p-1.5 shadow-2xl">
+                  <img 
+                    src="/logo.png" 
+                    alt="Alibobo Logo" 
+                    className="w-full h-full rounded-3xl object-cover bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Features - 3ta Card */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 max-w-5xl mx-auto px-4">
+                <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700 hover:border-[#F87819] transition-all">
+                  <div className="w-12 h-12 bg-gradient-to-br from-[#F87819] to-[#ff8c3a] rounded-xl flex items-center justify-center mb-4 mx-auto">
+                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-bold text-white mb-2 text-center">Xodimlar Boshqaruvi</h3>
+                  <p className="text-sm text-gray-400 text-center">Barcha xodimlarning oyligini bir joyda boshqaring</p>
+                </div>
+
+                <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700 hover:border-[#F87819] transition-all">
+                  <div className="w-12 h-12 bg-gradient-to-br from-[#F87819] to-[#ff8c3a] rounded-xl flex items-center justify-center mb-4 mx-auto">
+                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-bold text-white mb-2 text-center">Savdo Hisobotlari</h3>
+                  <p className="text-sm text-gray-400 text-center">Kunlik va oylik savdo statistikasini kuzating</p>
+                </div>
+
+                <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700 hover:border-[#F87819] transition-all">
+                  <div className="w-12 h-12 bg-gradient-to-br from-[#F87819] to-[#ff8c3a] rounded-xl flex items-center justify-center mb-4 mx-auto">
+                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-bold text-white mb-2 text-center">Jarima Nazorati</h3>
+                  <p className="text-sm text-gray-400 text-center">Jarimalar jamg'armasini avtomatik hisoblang</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Login Modal */}
+        {showLoginModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border-4 border-gray-900">
+              {/* Header */}
+              <div className="px-8 py-6 bg-gradient-to-br from-gray-900 to-black relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-[#F87819] opacity-10 rounded-full -mr-16 -mt-16"></div>
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-[#F87819] opacity-10 rounded-full -ml-12 -mb-12"></div>
+                
+                <div className="relative flex items-center gap-4">
+                  <div className="w-16 h-16 bg-gradient-to-br from-[#F87819] to-[#ff8c3a] rounded-2xl flex items-center justify-center shadow-xl">
+                    <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-white">Tizimga Kirish</h3>
+                    <p className="text-sm text-gray-300 mt-1">Admin panelga kirish uchun</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="p-8 space-y-5">
+                {loginError && (
+                  <div className="bg-red-50 border-2 border-red-500 rounded-xl p-4 flex items-center gap-3 animate-shake">
+                    <div className="flex-shrink-0 w-10 h-10 bg-red-500 rounded-full flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-bold text-red-700">{loginError}</p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-2.5">Login</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="text"
+                      value={loginInput}
+                      onChange={(e) => setLoginInput(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                      className="w-full pl-12 pr-4 py-3.5 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F87819] focus:border-[#F87819] text-gray-900 font-medium transition-all"
+                      placeholder="Login kiriting"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-2.5">Parol</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="password"
+                      value={passwordInput}
+                      onChange={(e) => setPasswordInput(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                      className="w-full pl-12 pr-4 py-3.5 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F87819] focus:border-[#F87819] text-gray-900 font-medium transition-all"
+                      placeholder="Parol kiriting"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-8 py-6 bg-gray-50 border-t-2 border-gray-200 flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowLoginModal(false);
+                    setLoginInput("");
+                    setPasswordInput("");
+                    setLoginError("");
+                  }}
+                  className="flex-1 px-5 py-3.5 border-2 border-gray-900 text-gray-900 text-sm font-bold rounded-xl hover:bg-gray-900 hover:text-white transition-all"
+                >
+                  Bekor qilish
+                </button>
+                <button
+                  onClick={handleLogin}
+                  className="flex-1 px-5 py-3.5 bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white text-sm font-bold rounded-xl hover:shadow-2xl hover:scale-[1.02] transition-all shadow-lg"
+                >
+                  Kirish
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
@@ -727,10 +915,10 @@ export default function App() {
               className="w-full px-4 py-3 rounded-xl text-sm font-bold transition-all bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white hover:shadow-2xl hover:shadow-orange-500/50 hover:scale-[1.02] shadow-lg"
             >
               <div className="flex items-center justify-center gap-3">
-                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
-                <span className="text-lg font-bold">Kirish</span>
+                <span className="text-base font-bold">Kirish</span>
               </div>
             </button>
           ) : (
@@ -739,13 +927,13 @@ export default function App() {
                 handleLogout();
                 setIsMobileSidebarOpen(false);
               }}
-              className="w-full px-4 py-4 rounded-xl text-sm font-bold transition-all bg-gray-800 text-white hover:bg-gray-700 hover:shadow-xl hover:scale-[1.02] shadow-lg"
+              className="w-full px-4 py-3 rounded-xl text-sm font-bold transition-all bg-gray-800 text-white hover:bg-gray-700 hover:shadow-xl hover:scale-[1.02] shadow-lg"
             >
               <div className="flex items-center justify-center gap-3">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
-                <span>Chiqish</span>
+                <span className="text-base font-bold">Chiqish</span>
               </div>
             </button>
           )}
@@ -781,7 +969,7 @@ export default function App() {
             </div>
             {isAuthenticated && (
               <button
-                onClick={async () => {
+                onClick={() => {
                   // Tekshirish: xodimlar bormi?
                   if (currentBranch.employees.length === 0) {
                     setShowSaveErrorModal(true);
@@ -795,19 +983,8 @@ export default function App() {
                     return;
                   }
                   
-                  try {
-                    const result = await api.saveDailyHistory(currentBranch._id);
-                    if (result.ok) {
-                      setSavedDate(result.date);
-                      setShowSaveSuccessModal(true);
-                      // Ma'lumotlarni qayta yuklaymiz
-                      await loadBranches(false);
-                      await loadHistory();
-                    }
-                  } catch (error) {
-                    alert('❌ Saqlashda xato yuz berdi');
-                    console.error(error);
-                  }
+                  // Tasdiqlash modal oynasini ko'rsatamiz
+                  setShowSaveConfirmModal(true);
                 }}
                 className="px-6 py-2.5 bg-[#F87819] text-white text-sm font-bold rounded-lg hover:bg-[#e06d15] transition-all shadow-lg flex items-center gap-2"
               >
@@ -1717,8 +1894,14 @@ export default function App() {
                     const numValue = parseFloat(cleaned);
                     setDailySalesInput(formatNumber(numValue));
                   }}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      updateDailySales();
+                    }
+                  }}
                   className="w-full px-4 py-3 border-2 border-green-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-lg font-bold text-gray-900"
                   placeholder="0"
+                  autoFocus
                 />
                 <p className="text-xs text-gray-500 mt-1">Masalan: 10,000,000 (1.4% = 140,000 so'm)</p>
               </div>
@@ -1738,6 +1921,11 @@ export default function App() {
                     }
                     const numValue = parseFloat(cleaned);
                     setWholesaleSalesInput(formatNumber(numValue));
+                  }}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      updateDailySales();
+                    }
                   }}
                   className="w-full px-4 py-3 border-2 border-blue-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg font-bold text-gray-900"
                   placeholder="0"
@@ -1945,6 +2133,79 @@ export default function App() {
         </div>
       )}
 
+      {/* Modal - Saqlashni tasdiqlash */}
+      {showSaveConfirmModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border-2 border-orange-100">
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-orange-100 to-yellow-100 rounded-full flex items-center justify-center shadow-lg">
+                  <svg className="w-7 h-7 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="text-base font-bold text-gray-900">Tarixga saqlashni tasdiqlaysizmi?</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Barcha ma'lumotlar tarixga saqlanadi va 0 ga qaytariladi.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-orange-100 flex gap-3">
+              <button
+                onClick={() => setShowSaveConfirmModal(false)}
+                disabled={isSaving}
+                className="flex-1 px-4 py-2 border-2 border-gray-300 text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Bekor qilish
+              </button>
+              <button
+                onClick={async () => {
+                  if (isSaving) return; // Agar saqlanyapti bo'lsa, qayta bosishni oldini olamiz
+                  
+                  setIsSaving(true);
+                  
+                  try {
+                    const result = await api.saveDailyHistory(currentBranch._id);
+                    if (result.ok) {
+                      setShowSaveConfirmModal(false);
+                      setSavedDate(result.date);
+                      setShowSaveSuccessModal(true);
+                      // Ma'lumotlarni qayta yuklaymiz
+                      await loadBranches(false);
+                      await loadHistory();
+                    } else {
+                      alert('❌ Saqlashda xato yuz berdi');
+                    }
+                  } catch (error) {
+                    alert('❌ Saqlashda xato yuz berdi');
+                    console.error(error);
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }}
+                disabled={isSaving}
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isSaving ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saqlanmoqda...
+                  </>
+                ) : (
+                  'Ha, saqlash'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal - Saqlash muvaffaqiyatli */}
       {showSaveSuccessModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -2011,8 +2272,17 @@ export default function App() {
 
       {/* Modal - Tarixni o'chirish tasdiqlash */}
       {showDeleteHistoryConfirm && historyToDelete && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+        <div 
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setShowDeleteHistoryConfirm(false);
+            setHistoryToDelete(null);
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-6 py-5 bg-gradient-to-b from-gray-900 to-gray-800">
               <h3 className="text-xl font-bold text-white">Tarixni o'chirish</h3>
             </div>

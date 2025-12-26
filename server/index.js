@@ -651,9 +651,9 @@ app.post('/api/history/save-daily', async (req, res) => {
     });
     
     // Tarixga saqlagandan keyin ma'lumotlarni 0 ga qaytaramiz
-    // 1. Barcha sotuvchilarning kunlik savdosini 0 ga qilamiz
+    // 1. BARCHA xodimlarning kunlik savdosini 0 ga qilamiz (faqat sotuvchi emas!)
     await Employee.updateMany(
-      { branchId: branchId, position: 'sotuvchi' },
+      { branchId: branchId },
       { 
         dailySales: 0,
         wholesaleSales: 0,

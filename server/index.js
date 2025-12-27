@@ -13,9 +13,17 @@ app.use(cors());
 app.use(express.json());
 
 // Schemas - avval yaratamiz
+// Lavozim schema
+const positionSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  name: { type: String, required: true },
+  color: { type: String, required: true },
+  isDefault: { type: Boolean, default: false } // Standart lavozimlarni belgilash uchun
+}, { timestamps: true });
+
 // Kunlik vazifa shabloni schema
 const taskTemplateSchema = new mongoose.Schema({
-  position: { type: String, enum: ['ishchi', 'manager', 'kassir', 'shofir', 'sotuvchi', 'taminotchi'], required: true },
+  position: { type: String, required: true }, // Har qanday lavozim (dinamik)
   taskName: { type: String, required: true },
   description: { type: String },
   order: { type: Number, default: 0 } // Tartib raqami
@@ -23,13 +31,14 @@ const taskTemplateSchema = new mongoose.Schema({
 
 const employeeSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  position: { type: String, enum: ['ishchi', 'manager', 'kassir', 'shofir', 'sotuvchi', 'taminotchi'], required: true },
+  position: { type: String, required: true }, // Har qanday lavozim (dinamik)
   percentage: { type: Number, required: true },
   branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true },
   dailyTasks: { type: mongoose.Schema.Types.Mixed, default: {} }, // Dynamic object: { taskId: boolean }
   dailySales: { type: Number, default: 0 }, // Kunlik chakana savdo
   wholesaleSales: { type: Number, default: 0 }, // Kunlik optom savdo
-  lastSalesDate: { type: String, default: null } // Oxirgi savdo kiritilgan sana (YYYY-MM-DD)
+  lastSalesDate: { type: String, default: null }, // Oxirgi savdo kiritilgan sana (YYYY-MM-DD)
+  fixedBonus: { type: Number, default: 0 } // Standart oylik (bonus)
 });
 
 const branchSchema = new mongoose.Schema({
@@ -67,11 +76,27 @@ const Employee = mongoose.model('Employee', employeeSchema);
 const Branch = mongoose.model('Branch', branchSchema);
 const DailySalesHistory = mongoose.model('DailySalesHistory', dailySalesHistorySchema);
 const TaskTemplate = mongoose.model('TaskTemplate', taskTemplateSchema);
+const Position = mongoose.model('Position', positionSchema);
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI)
   .then(async () => {
     console.log('MongoDB ga ulandi');
+    
+    // Standart lavozimlarni yaratish
+    const positionCount = await Position.countDocuments();
+    if (positionCount === 0) {
+      await Position.insertMany([
+        { id: "ishchi", name: "Ishchi", color: "bg-gray-100 text-gray-800 border-2 border-gray-300", isDefault: true },
+        { id: "manager", name: "Manager", color: "bg-gray-900 text-white shadow-md", isDefault: true },
+        { id: "kassir", name: "Kassir", color: "bg-white text-gray-900 border-2 border-gray-900", isDefault: true },
+        { id: "shofir", name: "Shofir", color: "bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white shadow-md", isDefault: true },
+        { id: "sotuvchi", name: "Sotuvchi", color: "bg-white text-[#F87819] border-2 border-[#F87819]", isDefault: true },
+        { id: "taminotchi", name: "Ta'minotchi", color: "bg-gray-700 text-white shadow-md", isDefault: true },
+      ]);
+      console.log('Standart lavozimlar yaratildi');
+    }
+    
     // Boshlang'ich filiallarni yaratish
     const count = await Branch.countDocuments();
     if (count === 0) {
@@ -249,7 +274,8 @@ app.get('/api/branches', async (req, res) => {
             dailyTasks: dailyTasks,
             dailySales: dailySales,
             wholesaleSales: wholesaleSales,
-            lastSalesDate: emp.lastSalesDate
+            lastSalesDate: emp.lastSalesDate,
+            fixedBonus: emp.fixedBonus || 0
           };
         }));
         
@@ -352,6 +378,11 @@ app.put('/api/employees/:id', async (req, res) => {
       wholesaleSales: req.body.wholesaleSales
     };
     
+    // Agar fixedBonus berilgan bo'lsa, uni ham yangilaymiz
+    if (req.body.fixedBonus !== undefined) {
+      updateData.fixedBonus = req.body.fixedBonus;
+    }
+    
     // Agar dailySales yoki wholesaleSales yangilansa, bugungi sanani saqlaymiz
     if (req.body.dailySales !== undefined || req.body.wholesaleSales !== undefined) {
       const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
@@ -371,7 +402,8 @@ app.put('/api/employees/:id', async (req, res) => {
       dailyTasks: employee.dailyTasks || {},
       dailySales: employee.dailySales,
       wholesaleSales: employee.wholesaleSales,
-      lastSalesDate: employee.lastSalesDate
+      lastSalesDate: employee.lastSalesDate,
+      fixedBonus: employee.fixedBonus || 0
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -913,6 +945,111 @@ app.post('/api/migrate-sales', async (req, res) => {
       ok: true,
       message: `${updated} ta filial yangilandi`,
       updated: updated
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+// ============ LAVOZIMLAR API ============
+
+// Barcha lavozimlarni olish
+app.get('/api/positions', async (req, res) => {
+  try {
+    const positions = await Position.find().sort({ isDefault: -1, createdAt: 1 });
+    res.json({
+      ok: true,
+      positions: positions.map(p => ({
+        id: p.id,
+        name: p.name,
+        color: p.color,
+        isDefault: p.isDefault
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+// Yangi lavozim qo'shish
+app.post('/api/positions', async (req, res) => {
+  try {
+    const { id, name, color } = req.body;
+    
+    // Dublikat tekshirish
+    const existing = await Position.findOne({ id });
+    if (existing) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Bu lavozim allaqachon mavjud'
+      });
+    }
+    
+    const position = new Position({
+      id,
+      name,
+      color,
+      isDefault: false
+    });
+    
+    await position.save();
+    
+    res.json({
+      ok: true,
+      position: {
+        id: position.id,
+        name: position.name,
+        color: position.color,
+        isDefault: position.isDefault
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+// Lavozimni o'chirish (faqat custom lavozimlar)
+app.delete('/api/positions/:id', async (req, res) => {
+  try {
+    const position = await Position.findOne({ id: req.params.id });
+    
+    if (!position) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Lavozim topilmadi'
+      });
+    }
+    
+    if (position.isDefault) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Standart lavozimlarni o\'chirish mumkin emas'
+      });
+    }
+    
+    // Bu lavozimda xodimlar bormi tekshirish
+    const employeeCount = await Employee.countDocuments({ position: req.params.id });
+    if (employeeCount > 0) {
+      return res.status(400).json({
+        ok: false,
+        error: `Bu lavozimda ${employeeCount} ta xodim mavjud. Avval ularni boshqa lavozimga o'tkazing.`
+      });
+    }
+    
+    await Position.deleteOne({ id: req.params.id });
+    
+    res.json({
+      ok: true,
+      message: 'Lavozim o\'chirildi'
     });
   } catch (error) {
     res.status(500).json({

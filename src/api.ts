@@ -3,12 +3,13 @@ const API_URL = '/api';
 export type Employee = {
   id: string;
   name: string;
-  position: "ishchi" | "manager" | "kassir" | "shofir" | "sotuvchi" | "taminotchi";
+  position: string; // Har qanday lavozim (dinamik)
   percentage: number;
   dailyTasks?: Record<string, boolean>; // Dynamic object: { taskId: boolean }
   dailySales?: number; // Kunlik chakana savdo
   wholesaleSales?: number; // Kunlik optom savdo
   lastSalesDate?: string; // Oxirgi savdo kiritilgan sana (YYYY-MM-DD)
+  fixedBonus?: number; // Standart oylik (bonus)
 };
 
 export type Branch = {
@@ -178,6 +179,32 @@ export const api = {
   async migrateSales() {
     const response = await fetch(`${API_URL}/migrate-sales`, {
       method: 'POST'
+    });
+    return response.json();
+  },
+
+  // ============ LAVOZIMLAR API ============
+  
+  // Barcha lavozimlarni olish
+  async getPositions() {
+    const response = await fetch(`${API_URL}/positions`);
+    return response.json();
+  },
+
+  // Yangi lavozim qo'shish
+  async addPosition(id: string, name: string, color: string) {
+    const response = await fetch(`${API_URL}/positions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name, color })
+    });
+    return response.json();
+  },
+
+  // Lavozimni o'chirish
+  async deletePosition(id: string) {
+    const response = await fetch(`${API_URL}/positions/${id}`, {
+      method: 'DELETE'
     });
     return response.json();
   }

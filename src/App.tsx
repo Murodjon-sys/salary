@@ -1401,7 +1401,7 @@ export default function App() {
                         await loadBranches(false);
                       } catch (error) {
                         console.error('Xato:', error);
-                        alert('❌ Xato yuz berdi! Console'ni tekshiring.');
+                        alert('❌ Xato yuz berdi! Console ni tekshiring.');
                       }
                     }
                   }}

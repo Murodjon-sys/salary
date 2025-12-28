@@ -1059,6 +1059,35 @@ app.delete('/api/positions/:id', async (req, res) => {
   }
 });
 
+// Vazifalarni tuzatish: Faqat sotuvchilar uchun vazifalar qoldirish
+app.post('/api/employees/fix-non-seller-tasks', async (req, res) => {
+  try {
+    const { branchId } = req.body;
+    
+    // Sotuvchi bo'lmagan xodimlarning vazifalarini o'chiramiz
+    const result = await Employee.updateMany(
+      { 
+        branchId: branchId,
+        position: { $ne: 'sotuvchi' } // sotuvchi emas
+      },
+      { 
+        $set: { dailyTasks: {} } // Vazifalarni bo'sh qilamiz
+      }
+    );
+    
+    res.json({
+      ok: true,
+      message: `${result.modifiedCount} ta xodimning vazifalar o'chirildi`,
+      modifiedCount: result.modifiedCount
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      ok: false, 
+      error: error.message 
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server ${PORT} portda ishlamoqda`);

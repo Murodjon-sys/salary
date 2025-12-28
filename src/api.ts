@@ -207,5 +207,15 @@ export const api = {
       method: 'DELETE'
     });
     return response.json();
+  },
+
+  // Sotuvchi bo'lmagan xodimlarning vazifalarini o'chirish
+  async fixNonSellerTasks(branchId: string) {
+    const response = await fetch(`${API_URL}/employees/fix-non-seller-tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ branchId })
+    });
+    return response.json();
   }
 };

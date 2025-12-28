@@ -530,6 +530,9 @@ export default function App() {
     const employeeId = selectedEmployee.id;
     const updatedTasks = { ...tasks }; // Nusxa olamiz
     
+    console.log('🔄 Updating tasks for employee:', employeeId);
+    console.log('📋 New tasks:', updatedTasks);
+    
     // Modal'ni darhol yopamiz
     setShowTasksModal(false);
     setSelectedEmployee(null);
@@ -537,19 +540,22 @@ export default function App() {
     
     try {
       // Lokal state'ni darhol yangilaymiz - MUHIM: yangi obyekt yaratamiz
-      setBranches(prevBranches => 
-        prevBranches.map(branch => ({
+      setBranches(prevBranches => {
+        const newBranches = prevBranches.map(branch => ({
           ...branch,
           employees: branch.employees.map(emp => 
             emp.id === employeeId 
               ? { ...emp, dailyTasks: { ...updatedTasks } }
               : emp
           )
-        }))
-      );
+        }));
+        console.log('✅ State updated, new branches:', newBranches);
+        return newBranches;
+      });
       
       // Background'da serverga saqlaymiz
       await api.updateEmployeeTasks(employeeId, updatedTasks);
+      console.log('💾 Tasks saved to server');
     } catch (error) {
       console.error("Vazifalarni yangilashda xato:", error);
       // Xato bo'lsa, qayta yuklaymiz
@@ -690,6 +696,16 @@ export default function App() {
       
       // Jami asosiy oylik
       baseSalary = retailSalary + wholesaleSalary;
+      
+      // DEBUG: Sotuvchi uchun hisoblash
+      console.log(`🛒 ${currentBranch.name} - ${employee.name} (sotuvchi):`, {
+        retailSales,
+        wholesaleSales,
+        percentage,
+        retailSalary,
+        wholesaleSalary,
+        baseSalary
+      });
     } else {
       // Boshqa xodimlar uchun
       
@@ -707,6 +723,19 @@ export default function App() {
         
         // Jami optom savdo (barcha sotuvchilardan)
         const totalWholesaleSales = filialSotuvchilar.reduce((sum, emp) => sum + (emp.wholesaleSales || 0), 0);
+        
+        // DEBUG: Sotuvchilar ma'lumotlarini ko'rsatish
+        console.log(`🏢 ${currentBranch.name} - ${employee.name} (${employee.position}):`, {
+          sotuvchilar: filialSotuvchilar.length,
+          totalRetailSales,
+          totalWholesaleSales,
+          percentage: employee.percentage,
+          sotuvchilarDetails: filialSotuvchilar.map(s => ({
+            name: s.name,
+            dailySales: s.dailySales,
+            wholesaleSales: s.wholesaleSales
+          }))
+        });
         
         // Chakana savdo (to'liq foiz) + Optom savdo (yarim foiz)
         const retailSalary = (totalRetailSales * percentage) / 100;
@@ -729,10 +758,13 @@ export default function App() {
       // Har bir bajarilmagan vazifa uchun 10% kamayadi
       const taskPercentage = 100 - (incompleteTasks * 10);
       
+      console.log(`💰 ${currentBranch.name} - ${employee.name}: baseSalary=${baseSalary.toFixed(2)}, completedTasks=${completedTasks}/${totalTasks}, taskPercentage=${taskPercentage}%, finalSalary=${((baseSalary * taskPercentage) / 100).toFixed(2)}`);
+      
       // Vazifalar foizini qo'llash
       calculatedSalary = (baseSalary * taskPercentage) / 100;
     } else {
       calculatedSalary = baseSalary;
+      console.log(`💰 ${currentBranch.name} - ${employee.name}: baseSalary=${baseSalary.toFixed(2)}, NO TASKS, finalSalary=${baseSalary.toFixed(2)}`);
     }
     
     // Standart oylik (bonus) qo'shish
@@ -782,7 +814,11 @@ export default function App() {
     }
     
     const actualSalary = calculateSalary(employee) - (employee.fixedBonus || 0); // Bonusni ayiramiz
-    return baseSalary - actualSalary;
+    const penalty = baseSalary - actualSalary;
+    
+    console.log(`⚠️ ${currentBranch.name} - ${employee.name} JARIMA: baseSalary=${baseSalary.toFixed(2)}, actualSalary=${actualSalary.toFixed(2)}, penalty=${penalty.toFixed(2)}`);
+    
+    return penalty;
   };
 
   // Filial uchun jami jarima (real-time) - BARCHA XODIMLAR
@@ -1334,6 +1370,48 @@ export default function App() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
                   Lavozim qo'shish
+                </button>
+                <button
+                  onClick={async () => {
+                    if (window.confirm(`${currentBranch.name} filialidagi sotuvchi bo'lmagan xodimlarning vazifalarini o'chirmoqchimisiz?\n\nBu Manager, Kassir, Ishchi, Shofir va boshqa lavozimlarning oyligini to'liq hisoblashga yordam beradi.`)) {
+                      try {
+                        // Lokal state'dan to'g'ridan-to'g'ri tuzatamiz
+                        let fixedCount = 0;
+                        
+                        // Har bir sotuvchi bo'lmagan xodimni topib, vazifalarini o'chiramiz
+                        for (const employee of currentBranch.employees) {
+                          if (employee.position !== 'sotuvchi' && employee.dailyTasks && Object.keys(employee.dailyTasks).length > 0) {
+                            // Backend'ga yuboramiz
+                            await api.updateEmployee(employee.id, {
+                              name: employee.name,
+                              position: employee.position,
+                              percentage: employee.percentage,
+                              dailyTasks: {}, // Bo'sh obyekt
+                              dailySales: employee.dailySales,
+                              wholesaleSales: employee.wholesaleSales,
+                              fixedBonus: employee.fixedBonus
+                            });
+                            fixedCount++;
+                          }
+                        }
+                        
+                        alert(`✅ ${fixedCount} ta xodimning vazifalar o'chirildi!`);
+                        
+                        // Ma'lumotlarni qayta yuklaymiz
+                        await loadBranches(false);
+                      } catch (error) {
+                        console.error('Xato:', error);
+                        alert('❌ Xato yuz berdi! Console'ni tekshiring.');
+                      }
+                    }
+                  }}
+                  className="px-6 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2"
+                  title="Sotuvchi bo'lmagan xodimlarning vazifalarini o'chirish"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Vazifalarni Tuzatish
                 </button>
                 <button
                   onClick={() => {

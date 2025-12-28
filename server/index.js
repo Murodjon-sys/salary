@@ -144,7 +144,20 @@ app.post('/api/login', async (req, res) => {
         message: 'Muvaffaqiyatli kirildi (Ko\'rish rejimi)',
         role: 'manager' // Faqat ko'rish
       });
-    } 
+    }
+    // G'ijduvon manager (Mamat0406) - faqat G'ijduvon filiali
+    else if (login === process.env.GIJDUVON_MANAGER_LOGIN && password === process.env.GIJDUVON_MANAGER_PASSWORD) {
+      // G'ijduvon filialini topamiz
+      const gijduvonBranch = await Branch.findOne({ name: "G'ijduvon Filial" });
+      
+      res.json({
+        ok: true,
+        message: 'Muvaffaqiyatli kirildi (G\'ijduvon Manager)',
+        role: 'gijduvon_manager', // Maxsus role
+        branchId: gijduvonBranch ? gijduvonBranch._id.toString() : null,
+        branchName: "G'ijduvon Filial"
+      });
+    }
     else {
       res.status(401).json({
         ok: false,

@@ -23,7 +23,8 @@ export default function App() {
   const [activeView, setActiveView] = useState<"branches" | "history" | "penalties" | "tasks" | "reports">("branches");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [userRole, setUserRole] = useState<'admin' | 'manager'>('admin');
+  const [userRole, setUserRole] = useState<'admin' | 'manager' | 'gijduvon_manager'>('admin');
+  const [allowedBranchId, setAllowedBranchId] = useState<string | null>(null); // Manager uchun ruxsat berilgan filial
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showSuccessNotification, setShowSuccessNotification] = useState(false);
   const [loginInput, setLoginInput] = useState("");
@@ -174,6 +175,14 @@ export default function App() {
       if (result.ok) {
         setIsAuthenticated(true);
         setUserRole(result.role || 'admin'); // Role'ni saqlaymiz
+        
+        // Agar gijduvon_manager bo'lsa, branchId'ni saqlaymiz va "Hisobotlar" sahifasiga o'tamiz
+        if (result.role === 'gijduvon_manager' && result.branchId) {
+          setAllowedBranchId(result.branchId);
+          localStorage.setItem('allowedBranchId', result.branchId);
+          setActiveView('reports'); // Avtomatik "Hisobotlar" sahifasiga o'tish
+        }
+        
         setShowLoginModal(false);
         setLoginInput("");
         setPasswordInput("");
@@ -196,8 +205,10 @@ export default function App() {
   const handleLogout = () => {
     setIsAuthenticated(false);
     setUserRole('admin');
+    setAllowedBranchId(null);
     localStorage.removeItem('isAuthenticated');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('allowedBranchId');
   };
 
   const toggleDarkMode = () => {
@@ -210,10 +221,18 @@ export default function App() {
   useEffect(() => {
     const auth = localStorage.getItem('isAuthenticated');
     const role = localStorage.getItem('userRole');
+    const branchId = localStorage.getItem('allowedBranchId');
     const darkMode = localStorage.getItem('isDarkMode');
     if (auth === 'true') {
       setIsAuthenticated(true);
-      setUserRole((role as 'admin' | 'manager') || 'admin');
+      setUserRole((role as 'admin' | 'manager' | 'gijduvon_manager') || 'admin');
+      if (branchId) {
+        setAllowedBranchId(branchId);
+      }
+      // Agar G'ijduvon manager bo'lsa, avtomatik "Hisobotlar" sahifasiga o'tamiz
+      if (role === 'gijduvon_manager') {
+        setActiveView('reports');
+      }
     }
     if (darkMode === 'true') {
       setIsDarkMode(true);
@@ -312,7 +331,12 @@ export default function App() {
     }
   };
 
-  const currentBranch = branches[activeBranch];
+  // G'ijduvon manager uchun faqat ruxsat berilgan filiallarni ko'rsatish
+  const filteredBranches = userRole === 'gijduvon_manager' && allowedBranchId
+    ? branches.filter(b => b._id === allowedBranchId)
+    : branches;
+
+  const currentBranch = filteredBranches[activeBranch];
 
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat("en-US").format(num);
@@ -1122,7 +1146,7 @@ export default function App() {
           <div className="mb-6">
             <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 px-3">Filiallar</h2>
             <div className="space-y-1">
-              {branches.map((branch, index) => (
+              {filteredBranches.map((branch, index) => (
                 <button
                   key={branch._id}
                   onClick={() => {
@@ -1166,32 +1190,36 @@ export default function App() {
           <div> 
             <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 px-3 ">Boshqalar <hr /> </h2> 
             <div className="space-y-1">
-              <button
-                onClick={() => {
-                  setActiveView("history");
-                  loadHistory();
-                  setIsMobileSidebarOpen(false);
-                }}
-                className={`w-full text-left px-4 py-3 rounded-xl text-sm font-semibold transition-all group ${
-                  activeView === "history"
-                    ? "bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white shadow-lg shadow-orange-500/30"
-                    : "text-gray-300 hover:bg-gray-800/50 hover:text-white"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+              {/* Tarix - faqat admin va manager uchun */}
+              {userRole !== 'gijduvon_manager' && (
+                <button
+                  onClick={() => {
+                    setActiveView("history");
+                    loadHistory();
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full text-left px-4 py-3 rounded-xl text-sm font-semibold transition-all group ${
                     activeView === "history"
-                      ? "bg-white/20"
-                      : "bg-gray-800 group-hover:bg-gray-700"
-                  }`}>
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                      ? "bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white shadow-lg shadow-orange-500/30"
+                      : "text-gray-300 hover:bg-gray-800/50 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                      activeView === "history"
+                        ? "bg-white/20"
+                        : "bg-gray-800 group-hover:bg-gray-700"
+                    }`}>
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <span className="truncate">Tarix</span>
                   </div>
-                  <span className="truncate">Tarix</span>
-                </div>
-              </button>
+                </button>
+              )}
 
+              {/* Jarimalar - BARCHA UCHUN */}
               <button
                 onClick={() => {
                   setActiveView("penalties");
@@ -1217,32 +1245,36 @@ export default function App() {
                 </div>
               </button>
 
-              <button
-                onClick={() => {
-                  setActiveView("tasks");
-                  loadTaskTemplates();
-                  setIsMobileSidebarOpen(false);
-                }}
-                className={`w-full text-left px-4 py-3 rounded-xl text-sm font-semibold transition-all group ${
-                  activeView === "tasks"
-                    ? "bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white shadow-lg shadow-orange-500/30"
-                    : "text-gray-300 hover:bg-gray-800/50 hover:text-white"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+              {/* Kunlik Ishlar - faqat admin va manager uchun */}
+              {userRole !== 'gijduvon_manager' && (
+                <button
+                  onClick={() => {
+                    setActiveView("tasks");
+                    loadTaskTemplates();
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full text-left px-4 py-3 rounded-xl text-sm font-semibold transition-all group ${
                     activeView === "tasks"
-                      ? "bg-white/20"
-                      : "bg-gray-800 group-hover:bg-gray-700"
-                  }`}>
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                    </svg>
+                      ? "bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white shadow-lg shadow-orange-500/30"
+                      : "text-gray-300 hover:bg-gray-800/50 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                      activeView === "tasks"
+                        ? "bg-white/20"
+                        : "bg-gray-800 group-hover:bg-gray-700"
+                    }`}>
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                    </div>
+                    <span className="truncate">Kunlik Ishlar</span>
                   </div>
-                  <span className="truncate">Kunlik Ishlar</span>
-                </div>
-              </button>
+                </button>
+              )}
 
+              {/* Hisobotlar - BARCHA UCHUN */}
               <button
                 onClick={() => {
                   setActiveView("reports");
@@ -1604,6 +1636,33 @@ export default function App() {
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
                               </button>
+                            </div>
+                          ) : userRole === 'gijduvon_manager' ? (
+                            // G'ijduvon manager uchun faqat 2ta tugma
+                            <div className="flex items-center gap-2">
+                              {/* Kunlik vazifalar tugmasi */}
+                              <button
+                                onClick={() => openTasksModal(employee)}
+                                className="group relative p-2.5 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border-2 border-blue-200 hover:border-blue-300 transition-all duration-200 hover:shadow-lg hover:scale-105"
+                                title="Kunlik vazifalar"
+                              >
+                                <svg className="w-5 h-5 text-blue-600 group-hover:text-blue-700 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                </svg>
+                              </button>
+                              
+                              {/* Kunlik savdo tugmasi - faqat sotuvchilar uchun */}
+                              {employee.position === "sotuvchi" && (
+                                <button
+                                  onClick={() => openSalesModal(employee)}
+                                  className="group relative p-2.5 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-2 border-green-200 hover:border-green-300 transition-all duration-200 hover:shadow-lg hover:scale-105"
+                                  title="Kunlik savdo"
+                                >
+                                  <svg className="w-5 h-5 text-green-600 group-hover:text-green-700 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           ) : (
                             <span className="text-sm text-gray-500 italic">—</span>

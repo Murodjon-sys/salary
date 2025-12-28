@@ -217,5 +217,41 @@ export const api = {
       body: JSON.stringify({ branchId })
     });
     return response.json();
+  },
+
+  // Migration: Eski tarixlarga fixedBonus qo'shish
+  async migrateHistoryFixedBonus() {
+    const response = await fetch(`${API_URL}/migrate-history-fixedbonus`, {
+      method: 'POST'
+    });
+    return response.json();
+  },
+
+  // ============ REGOS INTEGRATSIYA ============
+  
+  // REGOS dan kunlik savdoni sinxronizatsiya qilish
+  async syncDailySalesFromRegos(date?: string) {
+    const response = await fetch(`${API_URL}/regos/sync-daily-sales`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date })
+    });
+    return response.json();
+  },
+
+  // JSON fayldan sinxronizatsiya (Python script yaratgan)
+  async syncFromJsonFile(date?: string) {
+    const response = await fetch(`${API_URL}/regos/sync-from-json`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date })
+    });
+    return response.json();
+  },
+
+  // REGOS filiallarini mapping qilish
+  async getRegosDepartmentsMapping() {
+    const response = await fetch(`${API_URL}/regos/departments-mapping`);
+    return response.json();
   }
 };

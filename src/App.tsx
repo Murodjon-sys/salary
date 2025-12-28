@@ -23,7 +23,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<"branches" | "history" | "penalties" | "tasks" | "reports">("branches");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [userRole, setUserRole] = useState<'admin' | 'manager' | 'gijduvon_manager'>('admin');
+  const [userRole, setUserRole] = useState<'admin' | 'manager' | 'gijduvon_manager' | 'navoi_manager'>('admin');
   const [allowedBranchId, setAllowedBranchId] = useState<string | null>(null); // Manager uchun ruxsat berilgan filial
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showSuccessNotification, setShowSuccessNotification] = useState(false);
@@ -176,8 +176,8 @@ export default function App() {
         setIsAuthenticated(true);
         setUserRole(result.role || 'admin'); // Role'ni saqlaymiz
         
-        // Agar gijduvon_manager bo'lsa, branchId'ni saqlaymiz
-        if (result.role === 'gijduvon_manager' && result.branchId) {
+        // Agar gijduvon_manager yoki navoi_manager bo'lsa, branchId'ni saqlaymiz
+        if ((result.role === 'gijduvon_manager' || result.role === 'navoi_manager') && result.branchId) {
           setAllowedBranchId(result.branchId);
           localStorage.setItem('allowedBranchId', result.branchId);
           // "branches" sahifasida qolamiz (default), Hisobotlarga o'tmaymiz
@@ -225,7 +225,7 @@ export default function App() {
     const darkMode = localStorage.getItem('isDarkMode');
     if (auth === 'true') {
       setIsAuthenticated(true);
-      setUserRole((role as 'admin' | 'manager' | 'gijduvon_manager') || 'admin');
+      setUserRole((role as 'admin' | 'manager' | 'gijduvon_manager' | 'navoi_manager') || 'admin');
       if (branchId) {
         setAllowedBranchId(branchId);
       }
@@ -292,7 +292,20 @@ export default function App() {
   const loadBranches = async (showLoader = true) => {
     try {
       if (showLoader) setLoading(true);
+      
+      console.log('🔄 Loading branches from server...');
       const data = await api.getBranches();
+      console.log('📦 Received data:', data);
+      
+      // DEBUG: Xodimlarning fixedBonus qiymatlarini ko'ramiz
+      data.forEach((branch: Branch) => {
+        console.log(`📍 ${branch.name}:`);
+        branch.employees.forEach((emp: Employee) => {
+          if (emp.fixedBonus && emp.fixedBonus > 0) {
+            console.log(`  - ${emp.name}: fixedBonus = ${emp.fixedBonus}`);
+          }
+        });
+      });
       
       // Task templates ni yuklaymiz (oylik hisoblash uchun kerak)
       await loadTaskTemplates();
@@ -329,8 +342,8 @@ export default function App() {
     }
   };
 
-  // G'ijduvon manager uchun faqat ruxsat berilgan filiallarni ko'rsatish
-  const filteredBranches = userRole === 'gijduvon_manager' && allowedBranchId
+  // Filial menejerlari uchun faqat ruxsat berilgan filiallarni ko'rsatish
+  const filteredBranches = (userRole === 'gijduvon_manager' || userRole === 'navoi_manager') && allowedBranchId
     ? branches.filter(b => b._id === allowedBranchId)
     : branches;
 
@@ -1189,7 +1202,7 @@ export default function App() {
             <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 px-3 ">Boshqalar <hr /> </h2> 
             <div className="space-y-1">
               {/* Tarix - faqat admin va manager uchun */}
-              {userRole !== 'gijduvon_manager' && (
+              {userRole !== 'gijduvon_manager' && userRole !== 'navoi_manager' && (
                 <button
                   onClick={() => {
                     setActiveView("history");
@@ -1244,7 +1257,7 @@ export default function App() {
               </button>
 
               {/* Kunlik Ishlar - faqat admin va manager uchun */}
-              {userRole !== 'gijduvon_manager' && (
+              {userRole !== 'gijduvon_manager' && userRole !== 'navoi_manager' && (
                 <button
                   onClick={() => {
                     setActiveView("tasks");
@@ -1444,8 +1457,16 @@ export default function App() {
                     }
                     
                     // Tekshirish: savdo bormi?
+                    // 1. Filial umumiy savdosi
                     const totalSales = currentBranch.totalSales || 0;
-                    if (totalSales === 0) {
+                    
+                    // 2. Sotuvchilarning kunlik savdosi
+                    const sotuvchilarSavdosi = currentBranch.employees
+                      .filter(emp => emp.position === 'sotuvchi')
+                      .reduce((sum, emp) => sum + (emp.dailySales || 0) + (emp.wholesaleSales || 0), 0);
+                    
+                    // Agar hech qanday savdo bo'lmasa
+                    if (totalSales === 0 && sotuvchilarSavdosi === 0) {
                       setShowSaveErrorModal(true);
                       return;
                     }
@@ -1462,8 +1483,8 @@ export default function App() {
                 </button>
               </div>
             )}
-            {/* G'ijduvon manager uchun tugmalar */}
-            {isAuthenticated && userRole === 'gijduvon_manager' && (
+            {/* Filial menejerlari uchun tugmalar */}
+            {isAuthenticated && (userRole === 'gijduvon_manager' || userRole === 'navoi_manager') && (
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setShowFixTasksModal(true)}
@@ -1484,8 +1505,16 @@ export default function App() {
                     }
                     
                     // Tekshirish: savdo bormi?
+                    // 1. Filial umumiy savdosi
                     const totalSales = currentBranch.totalSales || 0;
-                    if (totalSales === 0) {
+                    
+                    // 2. Sotuvchilarning kunlik savdosi
+                    const sotuvchilarSavdosi = currentBranch.employees
+                      .filter(emp => emp.position === 'sotuvchi')
+                      .reduce((sum, emp) => sum + (emp.dailySales || 0) + (emp.wholesaleSales || 0), 0);
+                    
+                    // Agar hech qanday savdo bo'lmasa
+                    if (totalSales === 0 && sotuvchilarSavdosi === 0) {
                       setShowSaveErrorModal(true);
                       return;
                     }
@@ -1677,8 +1706,8 @@ export default function App() {
                                 </svg>
                               </button>
                             </div>
-                          ) : userRole === 'gijduvon_manager' ? (
-                            // G'ijduvon manager uchun faqat 2ta tugma
+                          ) : (userRole === 'gijduvon_manager' || userRole === 'navoi_manager') ? (
+                            // Filial menejerlari uchun faqat 2ta tugma
                             <div className="flex items-center gap-2">
                               {/* Kunlik vazifalar tugmasi */}
                               <button
@@ -1784,7 +1813,7 @@ export default function App() {
                     </div>
 
                     {/* Card Actions */}
-                    {(isAuthenticated && (userRole === 'admin' || userRole === 'gijduvon_manager')) && (
+                    {(isAuthenticated && (userRole === 'admin' || userRole === 'gijduvon_manager' || userRole === 'navoi_manager')) && (
                       <div className={`px-4 py-3 border-t flex items-center justify-center gap-3 ${
                         isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'
                       }`}>
@@ -1827,7 +1856,7 @@ export default function App() {
                               </svg>
                             </button>
                           </>
-                        ) : userRole === 'gijduvon_manager' ? (
+                        ) : (userRole === 'gijduvon_manager' || userRole === 'navoi_manager') ? (
                           <>
                             <button
                               onClick={() => openTasksModal(employee)}
@@ -1931,6 +1960,11 @@ export default function App() {
                     >
                       <div 
                         onClick={() => {
+                          console.log('📋 Selected history record:', record);
+                          console.log('👥 Employees in history:', record.employees);
+                          record.employees.forEach((emp: any) => {
+                            console.log(`  - ${emp.name}: fixedBonus = ${emp.fixedBonus || 0}`);
+                          });
                           setSelectedHistoryRecord(record);
                           setShowHistoryModal(true);
                         }}
@@ -2842,7 +2876,7 @@ export default function App() {
       {/* Modal - Kunlik Savdo (Sotuvchi uchun) */}
       {showSalesModal && selectedEmployee && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`rounded-2xl shadow-2xl max-w-md w-full overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+          <div className={`rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
             <div className="px-6 py-5 bg-gradient-to-b from-gray-900 to-gray-800">
               <h3 className="text-xl font-bold text-white">Kunlik Savdo - {selectedEmployee.name}</h3>
               <p className="text-sm text-gray-300 mt-1">
@@ -3212,7 +3246,8 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
+              {/* Desktop: Jadval, Mobile: Cardlar */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full">
                   <thead className={`border-b ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
                     <tr>
@@ -3243,6 +3278,54 @@ export default function App() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Mobile: Card ko'rinishi */}
+              <div className="md:hidden space-y-3">
+                {selectedHistoryRecord.employees.map((emp: any) => (
+                  <div 
+                    key={emp.employeeId} 
+                    className={`rounded-xl border-2 p-4 ${
+                      isDarkMode 
+                        ? 'bg-gray-700 border-gray-600' 
+                        : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className={`font-bold text-base ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {emp.name}
+                      </h4>
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold uppercase ${positionColors[emp.position as keyof typeof positionColors]}`}>
+                        {emp.position}
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {emp.position === 'sotuvchi' && (
+                        <div className="flex justify-between text-sm">
+                          <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Kunlik Savdo:</span>
+                          <span className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                            {formatMoney(emp.dailySales || 0)}
+                          </span>
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-between text-sm">
+                        <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Foiz:</span>
+                        <span className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                          {emp.percentage}%
+                        </span>
+                      </div>
+                      
+                      <div className={`flex justify-between text-sm pt-2 border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}`}>
+                        <span className={`font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Oylik:</span>
+                        <span className="font-bold text-green-600 text-base">
+                          {formatMoney(emp.salary || 0)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -3305,9 +3388,12 @@ export default function App() {
                       setShowSaveConfirmModal(false);
                       setSavedDate(result.date);
                       setShowSaveSuccessModal(true);
-                      // Ma'lumotlarni qayta yuklaymiz
-                      await loadBranches(false);
+                      
+                      // Ma'lumotlarni to'liq qayta yuklaymiz (cache'siz)
+                      console.log('🔄 Reloading branches after saving to history...');
+                      await loadBranches(true); // Loading indicator bilan
                       await loadHistory();
+                      console.log('✅ Branches reloaded successfully');
                     } else {
                       alert('❌ Saqlashda xato yuz berdi');
                     }

@@ -2,7 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { regosService } from './regosService.js';
+import { regosService } from './regosIntegration.js';
 
 dotenv.config();
 
@@ -68,7 +68,8 @@ const dailySalesHistorySchema = new mongoose.Schema({
     wholesaleSales: { type: Number },
     dailyTasks: { type: mongoose.Schema.Types.Mixed }, // Dynamic object: { taskId: boolean }
     salary: { type: Number }, // Hisoblangan oylik
-    penaltyAmount: { type: Number, default: 0 } // Xodimdan ayrilgan jarima
+    penaltyAmount: { type: Number, default: 0 }, // Xodimdan ayrilgan jarima
+    fixedBonus: { type: Number, default: 0 } // Standart oylik (bonus)
   }]
 }, { timestamps: true });
 
@@ -156,6 +157,19 @@ app.post('/api/login', async (req, res) => {
         role: 'gijduvon_manager', // Maxsus role
         branchId: gijduvonBranch ? gijduvonBranch._id.toString() : null,
         branchName: "G'ijduvon Filial"
+      });
+    }
+    // Navoiy manager (Zikrillo7596) - faqat Navoiy filiali
+    else if (login === process.env.NAVOI_MANAGER_LOGIN && password === process.env.NAVOI_MANAGER_PASSWORD) {
+      // Navoiy filialini topamiz
+      const navoiBranch = await Branch.findOne({ name: "Navoiy Filial" });
+      
+      res.json({
+        ok: true,
+        message: 'Muvaffaqiyatli kirildi (Navoiy Manager)',
+        role: 'navoi_manager', // Maxsus role
+        branchId: navoiBranch ? navoiBranch._id.toString() : null,
+        branchName: "Navoiy Filial"
       });
     }
     else {
@@ -385,6 +399,11 @@ app.post('/api/employees', async (req, res) => {
 // Xodimni yangilash
 app.put('/api/employees/:id', async (req, res) => {
   try {
+    console.log(`🔄 Updating employee ${req.params.id}:`, {
+      name: req.body.name,
+      fixedBonus: req.body.fixedBonus
+    });
+    
     const updateData = { 
       name: req.body.name, 
       position: req.body.position, 
@@ -397,6 +416,7 @@ app.put('/api/employees/:id', async (req, res) => {
     // Agar fixedBonus berilgan bo'lsa, uni ham yangilaymiz
     if (req.body.fixedBonus !== undefined) {
       updateData.fixedBonus = req.body.fixedBonus;
+      console.log(`  ✅ Setting fixedBonus to ${req.body.fixedBonus}`);
     }
     
     // Agar dailySales yoki wholesaleSales yangilansa, bugungi sanani saqlaymiz
@@ -537,6 +557,117 @@ app.post('/api/branches/:id/sync-from-regos', async (req, res) => {
   }
 });
 
+// YANGI: REGOS dan avtomatik sinxronizatsiya
+app.post('/api/regos/sync-daily-sales', async (req, res) => {
+  try {
+    const { date } = req.body; // Format: YYYY-MM-DD
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    
+    console.log(`🔄 REGOS sinxronizatsiya boshlandi: ${targetDate}`);
+    
+    // 1. REGOS API dan ma'lumot olish
+    const regosData = await regosService.getDailySales(targetDate);
+    
+    // 2. Ma'lumotlarni qayta ishlash
+    const processedData = regosService.processData(regosData);
+    
+    // 3. MongoDB ga yozish
+    const result = await regosService.syncToMongoDB(Branch, processedData, targetDate);
+    
+    res.json({
+      ok: true,
+      message: 'REGOS dan sinxronizatsiya muvaffaqiyatli',
+      ...result
+    });
+    
+  } catch (error) {
+    console.error('❌ REGOS sinxronizatsiya xatosi:', error);
+    res.status(500).json({ 
+      ok: false, 
+      error: error.message 
+    });
+  }
+});
+
+// YANGI: JSON fayldan sinxronizatsiya (Python script yaratgan)
+app.post('/api/regos/sync-from-json', async (req, res) => {
+  try {
+    const { date } = req.body;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    
+    console.log(`📄 JSON fayldan sinxronizatsiya: ${targetDate}`);
+    
+    // 1. JSON faylni o'qish
+    const jsonData = await regosService.readJsonFile(targetDate);
+    
+    if (!jsonData) {
+      return res.status(404).json({
+        ok: false,
+        error: 'JSON fayl topilmadi'
+      });
+    }
+    
+    // 2. Ma'lumotlarni qayta ishlash
+    const processedData = regosService.processData(jsonData);
+    
+    // 3. MongoDB ga yozish
+    const result = await regosService.syncToMongoDB(Branch, processedData, targetDate);
+    
+    res.json({
+      ok: true,
+      message: 'JSON fayldan sinxronizatsiya muvaffaqiyatli',
+      ...result
+    });
+    
+  } catch (error) {
+    console.error('❌ JSON sinxronizatsiya xatosi:', error);
+    res.status(500).json({ 
+      ok: false, 
+      error: error.message 
+    });
+  }
+});
+
+// YANGI: REGOS filiallarini olish va mapping qilish
+app.get('/api/regos/departments-mapping', async (req, res) => {
+  try {
+    // 1. REGOS dan filiallar
+    const regosDepartments = await regosService.getDepartments();
+    
+    // 2. MongoDB dan filiallar
+    const localBranches = await Branch.find();
+    
+    // 3. Mapping taklif qilish
+    const mapping = regosDepartments.map(dept => {
+      // Nom bo'yicha mos filial topish
+      const matchedBranch = localBranches.find(branch => 
+        branch.name.toLowerCase().includes(dept.name.toLowerCase()) ||
+        dept.name.toLowerCase().includes(branch.name.toLowerCase())
+      );
+      
+      return {
+        regosId: dept.id,
+        regosName: dept.name,
+        localBranchId: matchedBranch?._id,
+        localBranchName: matchedBranch?.name,
+        matched: !!matchedBranch
+      };
+    });
+    
+    res.json({
+      ok: true,
+      mapping: mapping,
+      unmatchedCount: mapping.filter(m => !m.matched).length
+    });
+    
+  } catch (error) {
+    res.status(500).json({ 
+      ok: false, 
+      error: error.message 
+    });
+  }
+});
+
 // Xodimlarni import qilish (CSV yoki JSON)
 app.post('/api/employees/import', async (req, res) => {
   try {
@@ -614,6 +745,9 @@ app.post('/api/history/save-daily', async (req, res) => {
     // Xodimlar ma'lumotlarini tayyorlaymiz
     let totalPenalty = 0; // Jami jarima summasi
     const employeesData = employees.map(emp => {
+      // DEBUG: Xodimning fixedBonus qiymatini ko'ramiz
+      console.log(`📊 ${emp.name} - fixedBonus: ${emp.fixedBonus || 0}`);
+      
       // Oylikni hisoblaymiz
       let salary = 0;
       let penaltyAmount = 0;
@@ -643,6 +777,9 @@ app.post('/api/history/save-daily', async (req, res) => {
         } else {
           salary = baseSalary;
         }
+        
+        // Standart oylik (fixedBonus) qo'shamiz
+        salary += (emp.fixedBonus || 0);
       } else {
         // Boshqa xodimlar uchun chakana va optom savdodan hisoblash
         const retailSalary = (branch.retailSales || 0) * emp.percentage / 100;
@@ -663,6 +800,9 @@ app.post('/api/history/save-daily', async (req, res) => {
         } else {
           salary = baseSalary;
         }
+        
+        // Standart oylik (fixedBonus) qo'shamiz
+        salary += (emp.fixedBonus || 0);
       }
       
       return {
@@ -674,8 +814,22 @@ app.post('/api/history/save-daily', async (req, res) => {
         wholesaleSales: emp.wholesaleSales || 0,
         dailyTasks: emp.dailyTasks,
         salary: salary,
-        penaltyAmount: penaltyAmount
+        penaltyAmount: penaltyAmount,
+        fixedBonus: emp.fixedBonus || 0 // Standart oylik qo'shamiz
       };
+    });
+    
+    // DEBUG: Tarixga saqlanayotgan ma'lumotlarni ko'ramiz
+    console.log('💾 Saving to history:', {
+      date: targetDate,
+      branchId: branchId,
+      employeesCount: employeesData.length,
+      employeesWithBonus: employeesData.filter(e => e.fixedBonus > 0).length
+    });
+    employeesData.forEach(emp => {
+      if (emp.fixedBonus > 0) {
+        console.log(`  ✅ ${emp.name}: fixedBonus = ${emp.fixedBonus}`);
+      }
     });
     
     // Tarixda shu sana uchun yozuv bormi tekshiramiz
@@ -689,6 +843,7 @@ app.post('/api/history/save-daily', async (req, res) => {
       existing.penaltyAmount = totalPenalty;
       existing.employees = employeesData;
       await existing.save();
+      console.log('✅ History updated successfully');
     } else {
       // Yo'q bo'lsa, yangi yaratamiz
       const history = new DailySalesHistory({
@@ -701,6 +856,7 @@ app.post('/api/history/save-daily', async (req, res) => {
         employees: employeesData
       });
       await history.save();
+      console.log('✅ History created successfully');
     }
     
     // Jarimani filialning jamg'armasiga qo'shamiz
@@ -709,15 +865,24 @@ app.post('/api/history/save-daily', async (req, res) => {
     });
     
     // Tarixga saqlagandan keyin ma'lumotlarni 0 ga qaytaramiz
-    // 1. BARCHA xodimlarning kunlik savdosini 0 ga qilamiz (faqat sotuvchi emas!)
-    await Employee.updateMany(
-      { branchId: branchId },
-      { 
+    // 1. BARCHA xodimlarning kunlik savdosini va bonusini 0 ga qilamiz
+    console.log('🔄 Resetting employee data...');
+    
+    // Har bir xodimni alohida yangilash (updateMany ishlamasa)
+    const employeesToReset = await Employee.find({ branchId: branchId });
+    console.log(`📊 Found ${employeesToReset.length} employees to reset`);
+    
+    for (const emp of employeesToReset) {
+      await Employee.findByIdAndUpdate(emp._id, {
         dailySales: 0,
         wholesaleSales: 0,
-        lastSalesDate: null
-      }
-    );
+        lastSalesDate: null,
+        fixedBonus: 0
+      });
+      console.log(`  ✅ Reset: ${emp.name} (fixedBonus: ${emp.fixedBonus} → 0)`);
+    }
+    
+    console.log('✅ All employees reset successfully');
     
     // 2. Filialning umumiy savdosini 0 ga qilamiz
     await Branch.findByIdAndUpdate(branchId, { 
@@ -754,7 +919,29 @@ app.get('/api/history/:branchId', async (req, res) => {
     
     const history = await DailySalesHistory.find(query)
       .sort({ date: -1 }) // Eng yangi birinchi
-      .limit(limit ? parseInt(limit) : 30); // Default 30 kun
+      .limit(limit ? parseInt(limit) : 30)
+      .lean(); // To'liq JSON formatda qaytarish
+    
+    // DEBUG: Tarixdan o'qilgan ma'lumotlarni ko'ramiz
+    console.log(`📖 Reading history for branch ${branchId}:`, {
+      recordsCount: history.length,
+      dates: history.map(h => h.date)
+    });
+    
+    if (history.length > 0) {
+      const firstRecord = history[0];
+      console.log(`  First record (${firstRecord.date}):`, {
+        employeesCount: firstRecord.employees.length,
+        employeesWithBonus: firstRecord.employees.filter((e) => e.fixedBonus > 0).length
+      });
+      firstRecord.employees.forEach((emp) => {
+        console.log(`    📊 ${emp.name}:`, {
+          fixedBonus: emp.fixedBonus,
+          salary: emp.salary,
+          dailySales: emp.dailySales
+        });
+      });
+    }
     
     res.json({
       ok: true,
@@ -1100,6 +1287,51 @@ app.post('/api/employees/fix-non-seller-tasks', async (req, res) => {
     res.status(500).json({ 
       ok: false, 
       error: error.message 
+    });
+  }
+});
+
+// Migration: Eski tarixlarga fixedBonus qo'shish
+app.post('/api/migrate-history-fixedbonus', async (req, res) => {
+  try {
+    // Barcha tarix yozuvlarini topamiz
+    const allHistory = await DailySalesHistory.find({});
+    
+    let updatedCount = 0;
+    
+    for (const history of allHistory) {
+      let needsUpdate = false;
+      
+      // Har bir xodimni tekshiramiz
+      const updatedEmployees = history.employees.map((emp) => {
+        // Agar fixedBonus yo'q bo'lsa, 0 qo'yamiz
+        if (emp.fixedBonus === undefined || emp.fixedBonus === null) {
+          needsUpdate = true;
+          return {
+            ...emp.toObject(),
+            fixedBonus: 0
+          };
+        }
+        return emp;
+      });
+      
+      if (needsUpdate) {
+        history.employees = updatedEmployees;
+        await history.save();
+        updatedCount++;
+      }
+    }
+    
+    res.json({
+      ok: true,
+      message: `${updatedCount} ta tarix yozuvi yangilandi`,
+      totalRecords: allHistory.length,
+      updatedRecords: updatedCount
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message
     });
   }
 });

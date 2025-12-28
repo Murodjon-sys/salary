@@ -69,6 +69,10 @@ export default function App() {
   const [historyToDelete, setHistoryToDelete] = useState<any | null>(null);
   const [savedDate, setSavedDate] = useState<string>("");
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [showFixTasksModal, setShowFixTasksModal] = useState(false);
+  const [showFixTasksSuccessModal, setShowFixTasksSuccessModal] = useState(false);
+  const [showNoIssuesModal, setShowNoIssuesModal] = useState(false);
+  const [fixedTasksCount, setFixedTasksCount] = useState(0);
   const [newEmployee, setNewEmployee] = useState<Omit<Employee, "id">>({
     name: "",
     position: "ishchi" as any,
@@ -1372,46 +1376,14 @@ export default function App() {
                   Lavozim qo'shish
                 </button>
                 <button
-                  onClick={async () => {
-                    if (window.confirm(`${currentBranch.name} filialidagi sotuvchi bo'lmagan xodimlarning vazifalarini o'chirmoqchimisiz?\n\nBu Manager, Kassir, Ishchi, Shofir va boshqa lavozimlarning oyligini to'liq hisoblashga yordam beradi.`)) {
-                      try {
-                        // Lokal state'dan to'g'ridan-to'g'ri tuzatamiz
-                        let fixedCount = 0;
-                        
-                        // Har bir sotuvchi bo'lmagan xodimni topib, vazifalarini o'chiramiz
-                        for (const employee of currentBranch.employees) {
-                          if (employee.position !== 'sotuvchi' && employee.dailyTasks && Object.keys(employee.dailyTasks).length > 0) {
-                            // Backend'ga yuboramiz
-                            await api.updateEmployee(employee.id, {
-                              name: employee.name,
-                              position: employee.position,
-                              percentage: employee.percentage,
-                              dailyTasks: {}, // Bo'sh obyekt
-                              dailySales: employee.dailySales,
-                              wholesaleSales: employee.wholesaleSales,
-                              fixedBonus: employee.fixedBonus
-                            });
-                            fixedCount++;
-                          }
-                        }
-                        
-                        alert(`✅ ${fixedCount} ta xodimning vazifalar o'chirildi!`);
-                        
-                        // Ma'lumotlarni qayta yuklaymiz
-                        await loadBranches(false);
-                      } catch (error) {
-                        console.error('Xato:', error);
-                        alert('❌ Xato yuz berdi! Console ni tekshiring.');
-                      }
-                    }
-                  }}
+                  onClick={() => setShowFixTasksModal(true)}
                   className="px-6 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2"
-                  title="Sotuvchi bo'lmagan xodimlarning vazifalarini o'chirish"
+                  title="Oylik hisoblashni tekshirish va tuzatish"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Vazifalarni Tuzatish
+                  Oylikni Tekshirish
                 </button>
                 <button
                   onClick={() => {
@@ -3601,6 +3573,162 @@ export default function App() {
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Qo'shish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Oylikni Tekshirish va Tuzatish */}
+      {showFixTasksModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-black rounded-3xl shadow-2xl max-w-md w-full border border-gray-700">
+            {/* Header */}
+            <div className="p-8 text-center">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full mb-6 shadow-xl">
+                <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              
+              <h3 className="text-2xl font-bold text-white mb-3">
+                {currentBranch.name} says
+              </h3>
+              
+              <p className="text-gray-300 text-base leading-relaxed mb-2">
+                {currentBranch.name} filialidagi xodimlarning oylik hisoblashini tekshirish va tuzatishni xohlaysizmi?
+              </p>
+              
+              <p className="text-gray-400 text-sm leading-relaxed">
+                Agar vazifalar tufayli oylik noto'g'ri kamaygan bo'lsa, vazifalar o'chiriladi va oylik to'liq hisoblanadi.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="px-8 pb-8 flex gap-4">
+              <button
+                onClick={async () => {
+                  setShowFixTasksModal(false);
+                  try {
+                    let fixedCount = 0;
+                    let issuesFound: string[] = [];
+                    
+                    // Har bir xodimni tekshiramiz
+                    for (const employee of currentBranch.employees) {
+                      // Agar sotuvchi bo'lmasa va vazifalar bor bo'lsa
+                      if (employee.position !== 'sotuvchi' && employee.dailyTasks && Object.keys(employee.dailyTasks).length > 0) {
+                        // Vazifalarni o'chiramiz
+                        await api.updateEmployee(employee.id, {
+                          name: employee.name,
+                          position: employee.position,
+                          percentage: employee.percentage,
+                          dailyTasks: {}, // Bo'sh obyekt
+                          dailySales: employee.dailySales,
+                          wholesaleSales: employee.wholesaleSales,
+                          fixedBonus: employee.fixedBonus
+                        });
+                        fixedCount++;
+                        issuesFound.push(`${employee.name} (${employee.position}): Vazifalar o'chirildi`);
+                      }
+                    }
+                    
+                    if (fixedCount > 0) {
+                      setFixedTasksCount(fixedCount);
+                      setShowFixTasksSuccessModal(true);
+                      await loadBranches(false);
+                    } else {
+                      // Hech qanday muammo topilmadi - modal ko'rsatamiz
+                      setShowNoIssuesModal(true);
+                    }
+                  } catch (error) {
+                    console.error('Xato:', error);
+                    alert('❌ Xato yuz berdi! Console ni tekshiring.');
+                  }
+                }}
+                className="flex-1 px-6 py-3.5 bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-base font-bold rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02]"
+              >
+                Tekshirish
+              </button>
+              <button
+                onClick={() => setShowFixTasksModal(false)}
+                className="flex-1 px-6 py-3.5 bg-gradient-to-r from-gray-700 to-gray-800 text-white text-base font-bold rounded-xl hover:from-gray-600 hover:to-gray-700 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02]"
+              >
+                Bekor qilish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Oylik Tuzatildi (Success) */}
+      {showFixTasksSuccessModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-black rounded-3xl shadow-2xl max-w-md w-full border border-gray-700">
+            {/* Header */}
+            <div className="p-8 text-center">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full mb-6 shadow-xl">
+                <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              
+              <h3 className="text-2xl font-bold text-white mb-3">
+                Tuzatildi!
+              </h3>
+              
+              <p className="text-gray-300 text-base leading-relaxed mb-4">
+                {fixedTasksCount} ta xodimning oylik hisoblash muammosi tuzatildi
+              </p>
+              
+              <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-xl p-4">
+                <p className="text-green-400 text-sm font-semibold mb-1">✅ Natija:</p>
+                <p className="text-gray-400 text-xs">
+                  Vazifalar tufayli kamaygan oyliklar to'g'rilandi. Endi barcha xodimlarning oyligini to'liq hisoblanadi (100%).
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-8 pb-8">
+              <button
+                onClick={() => setShowFixTasksSuccessModal(false)}
+                className="w-full px-6 py-3.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-base font-bold rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02]"
+              >
+                Ajoyib!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Hech qanday muammo yo'q */}
+      {showNoIssuesModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-black rounded-3xl shadow-2xl max-w-md w-full border border-gray-700">
+            {/* Header */}
+            <div className="p-8 text-center">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full mb-6 shadow-xl">
+                <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              
+              <h3 className="text-2xl font-bold text-white mb-3">
+                {currentBranch.name} says
+              </h3>
+              
+              <p className="text-gray-300 text-base leading-relaxed">
+                ✅ Hech qanday muammo topilmadi! Barcha xodimlarning oyligini to'g'ri hisoblanmoqda.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="px-8 pb-8">
+              <button
+                onClick={() => setShowNoIssuesModal(false)}
+                className="w-full px-6 py-3.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-base font-bold rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02]"
+              >
+                OK
               </button>
             </div>
           </div>

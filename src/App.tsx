@@ -176,11 +176,11 @@ export default function App() {
         setIsAuthenticated(true);
         setUserRole(result.role || 'admin'); // Role'ni saqlaymiz
         
-        // Agar gijduvon_manager bo'lsa, branchId'ni saqlaymiz va "Hisobotlar" sahifasiga o'tamiz
+        // Agar gijduvon_manager bo'lsa, branchId'ni saqlaymiz
         if (result.role === 'gijduvon_manager' && result.branchId) {
           setAllowedBranchId(result.branchId);
           localStorage.setItem('allowedBranchId', result.branchId);
-          setActiveView('reports'); // Avtomatik "Hisobotlar" sahifasiga o'tish
+          // "branches" sahifasida qolamiz (default), Hisobotlarga o'tmaymiz
         }
         
         setShowLoginModal(false);
@@ -229,10 +229,8 @@ export default function App() {
       if (branchId) {
         setAllowedBranchId(branchId);
       }
-      // Agar G'ijduvon manager bo'lsa, avtomatik "Hisobotlar" sahifasiga o'tamiz
-      if (role === 'gijduvon_manager') {
-        setActiveView('reports');
-      }
+      // G'ijduvon manager uchun "branches" sahifasida qolamiz (default)
+      // Hisobotlarga o'tmaymiz
     }
     if (darkMode === 'true') {
       setIsDarkMode(true);
@@ -1464,6 +1462,46 @@ export default function App() {
                 </button>
               </div>
             )}
+            {/* G'ijduvon manager uchun tugmalar */}
+            {isAuthenticated && userRole === 'gijduvon_manager' && (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowFixTasksModal(true)}
+                  className="px-6 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2"
+                  title="Vazifalar mavjudligini tekshirish va qo'shish"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Vazifalarni Tekshirish
+                </button>
+                <button
+                  onClick={() => {
+                    // Tekshirish: xodimlar bormi?
+                    if (currentBranch.employees.length === 0) {
+                      setShowSaveErrorModal(true);
+                      return;
+                    }
+                    
+                    // Tekshirish: savdo bormi?
+                    const totalSales = currentBranch.totalSales || 0;
+                    if (totalSales === 0) {
+                      setShowSaveErrorModal(true);
+                      return;
+                    }
+                    
+                    // Tasdiqlash modal oynasini ko'rsatamiz
+                    setShowSaveConfirmModal(true);
+                  }}
+                  className="px-6 py-2.5 bg-[#F87819] text-white text-sm font-bold rounded-lg hover:bg-[#e06d15] transition-all shadow-lg flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                  </svg>
+                  Tarixga saqlash
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Sales Card */}
@@ -1525,8 +1563,10 @@ export default function App() {
                 <p className="text-sm text-gray-500">Yuqoridagi tugma orqali xodim qo'shing</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-max">
+              <>
+                {/* Desktop Table View */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <table className="w-full min-w-max">
                   <thead className={`border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
                     <tr>
                       <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Ism</th>
@@ -1673,6 +1713,150 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile Card View */}
+              <div className="lg:hidden p-4 space-y-4">
+                {currentBranch.employees.map((employee) => (
+                  <div 
+                    key={`${employee.id}-mobile-${JSON.stringify(employee.dailyTasks)}`}
+                    className={`rounded-xl border-2 shadow-lg overflow-hidden transition-all hover:shadow-xl ${
+                      isDarkMode 
+                        ? 'bg-gray-800 border-gray-700' 
+                        : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    {/* Card Header */}
+                    <div className={`px-4 py-3 border-b ${
+                      isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white text-lg font-bold shadow-md ${
+                          isDarkMode ? 'bg-gray-600' : 'bg-gray-900'
+                        }`}>
+                          {employee.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <h3 className={`text-base font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                            {employee.name}
+                          </h3>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold uppercase mt-1 ${positionColors[employee.position] || 'bg-gray-200 text-gray-800'}`}>
+                            {positions.find(p => p.id === employee.position)?.name || employee.position}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Body */}
+                    <div className="p-4 space-y-3">
+                      {/* Foiz */}
+                      <div className="flex items-center justify-between">
+                        <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Foiz:</span>
+                        <span className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{employee.percentage}%</span>
+                      </div>
+
+                      {/* Chakana Savdo - faqat sotuvchilar uchun */}
+                      {employee.position === "sotuvchi" && (
+                        <div className="flex items-center justify-between">
+                          <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Chakana Savdo:</span>
+                          <span className="text-sm font-bold text-green-600">
+                            {employee.dailySales ? formatMoney(employee.dailySales) : "0 so'm"}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Optom Savdo - faqat sotuvchilar uchun */}
+                      {employee.position === "sotuvchi" && (
+                        <div className="flex items-center justify-between">
+                          <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Optom Savdo:</span>
+                          <span className="text-sm font-bold text-blue-600">
+                            {employee.wholesaleSales ? formatMoney(employee.wholesaleSales) : "0 so'm"}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Oylik */}
+                      <div className={`flex items-center justify-between pt-3 border-t ${
+                        isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                      }`}>
+                        <span className={`text-sm font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Oylik:</span>
+                        <span className="text-lg font-bold text-green-600">{formatMoney(calculateSalary(employee))}</span>
+                      </div>
+                    </div>
+
+                    {/* Card Actions */}
+                    {(isAuthenticated && (userRole === 'admin' || userRole === 'gijduvon_manager')) && (
+                      <div className={`px-4 py-3 border-t flex items-center justify-center gap-3 ${
+                        isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'
+                      }`}>
+                        {userRole === 'admin' ? (
+                          <>
+                            {employee.position === "sotuvchi" && (
+                              <button
+                                onClick={() => openSalesModal(employee)}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-2 border-green-200 hover:border-green-300 transition-all"
+                              >
+                                <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span className="text-sm font-bold text-green-700">Savdo</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => openTasksModal(employee)}
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border-2 border-blue-200 hover:border-blue-300 transition-all"
+                            >
+                              <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                              </svg>
+                              <span className="text-sm font-bold text-blue-700">Vazifalar</span>
+                            </button>
+                            <button
+                              onClick={() => openEditEmployee(employee)}
+                              className="p-2.5 rounded-lg bg-gradient-to-br from-orange-50 to-amber-50 hover:from-orange-100 hover:to-amber-100 border-2 border-orange-200 hover:border-orange-300 transition-all"
+                            >
+                              <svg className="w-5 h-5 text-[#F87819]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => confirmDelete(employee.id)}
+                              className="p-2.5 rounded-lg bg-gradient-to-br from-red-50 to-rose-50 hover:from-red-100 hover:to-rose-100 border-2 border-red-200 hover:border-red-300 transition-all"
+                            >
+                              <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </>
+                        ) : userRole === 'gijduvon_manager' ? (
+                          <>
+                            <button
+                              onClick={() => openTasksModal(employee)}
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border-2 border-blue-200 hover:border-blue-300 transition-all shadow-md hover:shadow-lg"
+                            >
+                              <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                              </svg>
+                              <span className="text-sm font-bold text-blue-700">Kunlik Ishlar</span>
+                            </button>
+                            {employee.position === "sotuvchi" && (
+                              <button
+                                onClick={() => openSalesModal(employee)}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-2 border-green-200 hover:border-green-300 transition-all shadow-md hover:shadow-lg"
+                              >
+                                <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span className="text-sm font-bold text-green-700">Kunlik Savdo</span>
+                              </button>
+                            )}
+                          </>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
             )}
           </div>
 

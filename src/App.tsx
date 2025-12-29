@@ -37,6 +37,8 @@ export default function App() {
   const [showSalesModal, setShowSalesModal] = useState(false);
   const [showBonusModal, setShowBonusModal] = useState(false);
   const [bonusInput, setBonusInput] = useState("");
+  const [personalBonusInput, setPersonalBonusInput] = useState(""); // Shaxsiy bonus
+  const [teamVolumeBonusInput, setTeamVolumeBonusInput] = useState(""); // Jamoaviy abyom bonusi
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [showEditTaskModal, setShowEditTaskModal] = useState(false);
   const [showDeleteTaskConfirm, setShowDeleteTaskConfirm] = useState(false);
@@ -415,7 +417,26 @@ export default function App() {
     setSelectedEmployee(employee);
     setDailySalesInput(employee.dailySales?.toString() || "");
     setWholesaleSalesInput(employee.wholesaleSales?.toString() || "");
-    setBonusInput(employee.fixedBonus && employee.fixedBonus > 0 ? employee.fixedBonus.toString() : "");
+    
+    // Bonuslarni formatlab ko'rsatamiz
+    if (employee.fixedBonus && employee.fixedBonus > 0) {
+      setBonusInput(formatNumber(employee.fixedBonus));
+    } else {
+      setBonusInput("");
+    }
+    
+    if (employee.personalBonus && employee.personalBonus > 0) {
+      setPersonalBonusInput(formatNumber(employee.personalBonus));
+    } else {
+      setPersonalBonusInput("");
+    }
+    
+    if (employee.teamVolumeBonus && employee.teamVolumeBonus > 0) {
+      setTeamVolumeBonusInput(formatNumber(employee.teamVolumeBonus));
+    } else {
+      setTeamVolumeBonusInput("");
+    }
+    
     setShowSalesModal(true);
   };
 
@@ -478,14 +499,28 @@ export default function App() {
     const retailValue = dailySalesInput;
     const wholesaleValue = wholesaleSalesInput;
     const bonusValue = bonusInput;
+    const personalBonusValue = personalBonusInput;
+    const teamVolumeBonusValue = teamVolumeBonusInput;
     setDailySalesInput("");
     setWholesaleSalesInput("");
     setBonusInput("");
+    setPersonalBonusInput("");
+    setTeamVolumeBonusInput("");
     
     try {
       const retailSales = parseFloat(retailValue.replace(/,/g, "")) || 0;
       const wholesaleSales = parseFloat(wholesaleValue.replace(/,/g, "")) || 0;
       const fixedBonus = parseFloat(bonusValue.replace(/,/g, "")) || 0;
+      const personalBonus = parseFloat(personalBonusValue.replace(/,/g, "")) || 0;
+      const teamVolumeBonus = parseFloat(teamVolumeBonusValue.replace(/,/g, "")) || 0;
+      
+      console.log('💰 Saving bonuses:', {
+        fixedBonus,
+        personalBonus,
+        teamVolumeBonus,
+        retailSales,
+        wholesaleSales
+      });
       
       // Lokal state'ni darhol yangilaymiz
       setBranches(prevBranches => 
@@ -493,23 +528,33 @@ export default function App() {
           ...branch,
           employees: branch.employees.map(emp => 
             emp.id === employeeId 
-              ? { ...emp, dailySales: retailSales, wholesaleSales: wholesaleSales, fixedBonus: fixedBonus }
+              ? { ...emp, dailySales: retailSales, wholesaleSales: wholesaleSales, fixedBonus: fixedBonus, personalBonus: personalBonus, teamVolumeBonus: teamVolumeBonus }
               : emp
           )
         }))
       );
       
       // Background'da serverga saqlaymiz
-      await api.updateEmployee(employeeId, {
+      const updateData = {
         name: employeeName,
         position: employeePosition,
         percentage: employeePercentage,
         dailySales: retailSales,
         wholesaleSales: wholesaleSales,
-        fixedBonus: fixedBonus
-      });
+        fixedBonus: fixedBonus,
+        personalBonus: personalBonus,
+        teamVolumeBonus: teamVolumeBonus
+      };
+      
+      console.log('📤 Sending to server:', updateData);
+      
+      const result = await api.updateEmployee(employeeId, updateData);
+      
+      console.log('✅ Server response:', result);
       
       // Umumiy savdoni avtomatik yangilash (background'da)
+      // MUHIM: updateTotalSales() loadBranches() ni chaqiradi
+      // Bu yangi kiritilgan bonuslarni qayta yuklaydi
       updateTotalSales();
     } catch (error) {
       console.error("Savdoni yangilashda xato:", error);
@@ -520,33 +565,47 @@ export default function App() {
   };
 
   const updateTotalSales = async () => {
-    // Ma'lumotlarni qayta yuklab, yangilangan sotuvchilar savdosini hisoblaymiz
-    const data = await api.getBranches();
-    const currentBranchData = data[activeBranch];
-    
-    // Barcha sotuvchilar savdosini yig'ish (chakana va optom alohida)
-    const retailSales = currentBranchData.employees
-      .filter(emp => emp.position === 'sotuvchi')
-      .reduce((sum, emp) => sum + (emp.dailySales || 0), 0);
-    
-    const wholesaleSales = currentBranchData.employees
-      .filter(emp => emp.position === 'sotuvchi')
-      .reduce((sum, emp) => sum + (emp.wholesaleSales || 0), 0);
-    
-    const totalSales = retailSales + wholesaleSales;
-    
-    // Serverga saqlash (chakana va optom alohida)
-    await api.updateBranchSales(currentBranchData._id, totalSales, retailSales, wholesaleSales);
-    
-    // Agar bu filial bo'lsa (Asosiy Sklad emas), Asosiy Skladni ham yangilaymiz
-    if (currentBranchData.name !== "Asosiy Sklad") {
-      // Yangilangan ma'lumotlarni qayta olamiz
-      const updatedData = await api.getBranches();
-      await updateMainBranchSales(updatedData);
+    try {
+      // Ma'lumotlarni qayta yuklab, yangilangan sotuvchilar savdosini hisoblaymiz
+      const data = await api.getBranches();
+      const currentBranchData = data[activeBranch];
+      
+      // Barcha sotuvchilar savdosini yig'ish (chakana va optom alohida)
+      const retailSales = currentBranchData.employees
+        .filter(emp => emp.position === 'sotuvchi')
+        .reduce((sum, emp) => sum + (emp.dailySales || 0), 0);
+      
+      const wholesaleSales = currentBranchData.employees
+        .filter(emp => emp.position === 'sotuvchi')
+        .reduce((sum, emp) => sum + (emp.wholesaleSales || 0), 0);
+      
+      const totalSales = retailSales + wholesaleSales;
+      
+      // Serverga saqlash (chakana va optom alohida)
+      await api.updateBranchSales(currentBranchData._id, totalSales, retailSales, wholesaleSales);
+      
+      // Agar bu filial bo'lsa (Asosiy Sklad emas), Asosiy Skladni ham yangilaymiz
+      if (currentBranchData.name !== "Asosiy Sklad") {
+        // Yangilangan ma'lumotlarni qayta olamiz
+        const updatedData = await api.getBranches();
+        await updateMainBranchSales(updatedData);
+      }
+      
+      // MUHIM: loadBranches() ni chaqirmaymiz, chunki bu yangi kiritilgan bonuslarni
+      // serverdan qayta yuklaydi va ular yo'qoladi
+      // O'rniga, lokal state'ni yangilaymiz
+      setBranches(prevBranches => 
+        prevBranches.map((branch, index) => 
+          index === activeBranch
+            ? { ...branch, totalSales, retailSales, wholesaleSales }
+            : branch
+        )
+      );
+      
+      console.log('✅ Total sales updated without reloading all data');
+    } catch (error) {
+      console.error('❌ Error updating total sales:', error);
     }
-    
-    // Lokal holatni yangilash
-    await loadBranches(false);
   };
 
   const updateMainBranchSales = async (allBranches: Branch[]) => {
@@ -825,7 +884,7 @@ export default function App() {
     }
     
     // Standart oylik (bonus) qo'shish
-    return calculatedSalary + (employee.fixedBonus || 0);
+    return calculatedSalary + (employee.fixedBonus || 0) + (employee.personalBonus || 0) + (employee.teamVolumeBonus || 0);
   };
 
   // Jarima summasini hisoblash (real-time) - BARCHA XODIMLAR UCHUN
@@ -872,7 +931,7 @@ export default function App() {
       }
     }
     
-    const actualSalary = calculateSalary(employee) - (employee.fixedBonus || 0); // Bonusni ayiramiz
+    const actualSalary = calculateSalary(employee) - (employee.fixedBonus || 0) - (employee.personalBonus || 0) - (employee.teamVolumeBonus || 0); // Bonuslarni ayiramiz
     const penalty = baseSalary - actualSalary;
     
     console.log(`⚠️ ${currentBranch.name} - ${employee.name} JARIMA: baseSalary=${baseSalary.toFixed(2)}, actualSalary=${actualSalary.toFixed(2)}, penalty=${penalty.toFixed(2)}`);
@@ -2241,7 +2300,7 @@ export default function App() {
             {/* Lavozim tanlash */}
             <div className="mb-6">
               <label className={`block text-sm font-bold mb-3 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Lavozimni tanlang:</label>
-              <div className="grid grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
                 {['ishchi', 'manager', 'kassir', 'shofir', 'sotuvchi', 'taminotchi'].map((pos) => (
                   <button
                     key={pos}
@@ -2249,7 +2308,7 @@ export default function App() {
                       setSelectedPosition(pos);
                       loadTaskTemplates(pos);
                     }}
-                    className={`px-4 py-3 rounded-lg text-sm font-bold uppercase transition-all ${
+                    className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-xs sm:text-sm font-bold uppercase transition-all ${
                       selectedPosition === pos
                         ? 'bg-[#F87819] text-white shadow-lg'
                         : isDarkMode
@@ -2265,58 +2324,60 @@ export default function App() {
 
             {/* Vazifalar ro'yxati */}
             <div className={`rounded-xl border-2 shadow-sm overflow-hidden ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-              <div className="px-6 py-4 bg-gray-900 border-b border-gray-800">
-                <h2 className="text-lg font-bold text-white">{selectedPosition.toUpperCase()} uchun kunlik ishlar</h2>
+              <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gray-900 border-b border-gray-800">
+                <h2 className="text-base sm:text-lg font-bold text-white">{selectedPosition.toUpperCase()} uchun kunlik ishlar</h2>
               </div>
 
               {taskTemplates.length === 0 ? (
-                <div className="p-12 text-center">
-                  <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                    <svg className={`w-8 h-8 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="p-8 sm:p-12 text-center">
+                  <div className={`inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-full mb-3 sm:mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                    <svg className={`w-6 h-6 sm:w-8 sm:h-8 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                     </svg>
                   </div>
-                  <p className={`text-base font-medium mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Hozircha ishlar yo'q</p>
-                  <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Yuqoridagi tugma orqali kunlik ish qo'shing</p>
+                  <p className={`text-sm sm:text-base font-medium mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Hozircha ishlar yo'q</p>
+                  <p className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Yuqoridagi tugma orqali kunlik ish qo'shing</p>
                 </div>
               ) : (
                 <div className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
                   {taskTemplates.map((task, index) => (
-                    <div key={task._id} className={`p-6 transition-colors flex items-center gap-4 ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}>
-                      <div className="flex-shrink-0 w-10 h-10 bg-gray-900 text-white rounded-lg flex items-center justify-center font-bold">
-                        {index + 1}
-                      </div>
-                      
-                      <div className="flex-1">
-                        <h3 className={`text-base font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{task.taskName}</h3>
-                        {task.description && (
-                          <p className={`text-sm mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{task.description}</p>
+                    <div key={task._id} className={`p-4 sm:p-6 transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}>
+                      <div className="flex items-start gap-3 sm:gap-4">
+                        <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 bg-gray-900 text-white rounded-lg flex items-center justify-center font-bold text-sm sm:text-base">
+                          {index + 1}
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <h3 className={`text-sm sm:text-base font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{task.taskName}</h3>
+                          {task.description && (
+                            <p className={`text-xs sm:text-sm mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{task.description}</p>
+                          )}
+                        </div>
+
+                        {isAuthenticated && userRole === 'admin' && (
+                          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingTask(task);
+                                setNewTaskName(task.taskName);
+                                setShowEditTaskModal(true);
+                              }}
+                              className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-[#F87819] hover:bg-orange-50 rounded-lg transition-colors whitespace-nowrap"
+                            >
+                              Tahrirlash
+                            </button>
+                            <button
+                              onClick={() => {
+                                setTaskToDelete(task);
+                                setShowDeleteTaskConfirm(true);
+                              }}
+                              className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors whitespace-nowrap"
+                            >
+                              O'chirish
+                            </button>
+                          </div>
                         )}
                       </div>
-
-                      {isAuthenticated && userRole === 'admin' && (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => {
-                              setEditingTask(task);
-                              setNewTaskName(task.taskName);
-                              setShowEditTaskModal(true);
-                            }}
-                            className="px-4 py-2 text-sm font-medium text-[#F87819] hover:bg-orange-50 rounded-lg transition-colors"
-                          >
-                            Tahrirlash
-                          </button>
-                          <button
-                            onClick={() => {
-                              setTaskToDelete(task);
-                              setShowDeleteTaskConfirm(true);
-                            }}
-                            className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            O'chirish
-                          </button>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -2324,15 +2385,15 @@ export default function App() {
             </div>
 
             {/* Tushuntirish */}
-            <div className="mt-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 p-6">
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <div className="mt-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 p-4 sm:p-6">
+              <div className="flex items-start gap-3 sm:gap-4">
+                <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-sm font-bold text-gray-900 mb-2">Qanday ishlaydi:</h3>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-xs sm:text-sm font-bold text-gray-900 mb-2">Qanday ishlaydi:</h3>
                   <ul className="text-xs text-gray-700 space-y-1">
                     <li>• Har bir lavozim uchun alohida kunlik ishlar yaratishingiz mumkin</li>
                     <li>• Xodimlar jadvalida "Kunlik Vazifalar" tugmasi avtomatik paydo bo'ladi</li>
@@ -2876,149 +2937,309 @@ export default function App() {
       {/* Modal - Kunlik Savdo (Sotuvchi uchun) */}
       {showSalesModal && selectedEmployee && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-            <div className="px-6 py-5 bg-gradient-to-b from-gray-900 to-gray-800">
-              <h3 className="text-xl font-bold text-white">Kunlik Savdo - {selectedEmployee.name}</h3>
-              <p className="text-sm text-gray-300 mt-1">
-                Bugungi savdo miqdorlarini kiriting
-                {selectedEmployee.lastSalesDate && (
-                  <span className="ml-2 font-semibold text-[#F87819]">
-                    (Oxirgi: {new Date(selectedEmployee.lastSalesDate).toLocaleDateString('uz-UZ')})
-                  </span>
-                )}
-              </p>
+          <div className={`rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+            {/* Header */}
+            <div className="sticky top-0 z-10 px-6 py-5 bg-gradient-to-r from-[#F87819] to-[#ff8c3a]">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Kunlik Savdo</h3>
+                  <p className="text-sm text-white/90 mt-0.5">
+                    {selectedEmployee.name}
+                    {selectedEmployee.lastSalesDate && (
+                      <span className="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded">
+                        Oxirgi: {new Date(selectedEmployee.lastSalesDate).toLocaleDateString('uz-UZ')}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="p-6 space-y-4">
-              <div>
-                <label className={`block text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                  Chakana Savdo (so'm) - To'liq foiz
-                </label>
-                <input
-                  type="text"
-                  value={dailySalesInput}
-                  onChange={(e) => {
-                    const cleaned = e.target.value.replace(/[^\d]/g, "");
-                    if (cleaned === "") {
-                      setDailySalesInput("");
-                      return;
-                    }
-                    const numValue = parseFloat(cleaned);
-                    setDailySalesInput(formatNumber(numValue));
-                  }}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      updateDailySales();
-                    }
-                  }}
-                  className={`w-full px-4 py-3 border-2 border-green-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-lg font-bold ${
-                    isDarkMode ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-white text-gray-900'
-                  }`}
-                  placeholder="0"
-                  autoFocus
-                />
-                <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Masalan: 10,000,000 (1.4% = 140,000 so'm)</p>
+            <div className="p-6 space-y-6">
+              {/* SAVDO BO'LIMI */}
+              <div className={`rounded-xl p-4 ${isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className="flex items-center gap-2 mb-4">
+                  <svg className="w-5 h-5 text-[#F87819]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  <h4 className={`text-sm font-bold uppercase ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Savdo Ma'lumotlari</h4>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Chakana Savdo */}
+                  <div>
+                    <label className={`flex items-center gap-2 text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      Chakana Savdo (To'liq foiz)
+                    </label>
+                    <input
+                      type="text"
+                      value={dailySalesInput}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[^\d]/g, "");
+                        if (cleaned === "") {
+                          setDailySalesInput("");
+                          return;
+                        }
+                        const numValue = parseFloat(cleaned);
+                        setDailySalesInput(formatNumber(numValue));
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          updateDailySales();
+                        }
+                      }}
+                      className={`w-full px-4 py-3 border-2 border-green-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-lg font-bold ${
+                        isDarkMode ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-white text-gray-900'
+                      }`}
+                      placeholder="0"
+                      autoFocus
+                    />
+                    <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      💡 {selectedEmployee.percentage}% foiz qo'llaniladi
+                    </p>
+                  </div>
+
+                  {/* Optom Savdo */}
+                  <div>
+                    <label className={`flex items-center gap-2 text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                      <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                      Optom Savdo (Yarim foiz)
+                    </label>
+                    <input
+                      type="text"
+                      value={wholesaleSalesInput}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[^\d]/g, "");
+                        if (cleaned === "") {
+                          setWholesaleSalesInput("");
+                          return;
+                        }
+                        const numValue = parseFloat(cleaned);
+                        setWholesaleSalesInput(formatNumber(numValue));
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          updateDailySales();
+                        }
+                      }}
+                      className={`w-full px-4 py-3 border-2 border-blue-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg font-bold ${
+                        isDarkMode ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-white text-gray-900'
+                      }`}
+                      placeholder="0"
+                    />
+                    <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      💡 {selectedEmployee.percentage / 2}% foiz qo'llaniladi (yarim)
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className={`block text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                  Optom Savdo (so'm) - Yarim foiz
-                </label>
-                <input
-                  type="text"
-                  value={wholesaleSalesInput}
-                  onChange={(e) => {
-                    const cleaned = e.target.value.replace(/[^\d]/g, "");
-                    if (cleaned === "") {
-                      setWholesaleSalesInput("");
-                      return;
-                    }
-                    const numValue = parseFloat(cleaned);
-                    setWholesaleSalesInput(formatNumber(numValue));
-                  }}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      updateDailySales();
-                    }
-                  }}
-                  className={`w-full px-4 py-3 border-2 border-blue-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg font-bold ${
-                    isDarkMode ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-white text-gray-900'
-                  }`}
-                  placeholder="0"
-                />
-                <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Masalan: 20,000,000 (1.4% ÷ 2 = 140,000 so'm)</p>
-              </div>
+              {/* BONUSLAR BO'LIMI */}
+              <div className={`rounded-xl p-4 ${isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className="flex items-center gap-2 mb-4">
+                  <svg className="w-5 h-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <h4 className={`text-sm font-bold uppercase ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Qo'shimcha Bonuslar</h4>
+                </div>
 
-              <div>
-                <label className={`block text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                  Standart Oylik (so'm)
-                </label>
-                <input
-                  type="text"
-                  value={bonusInput}
-                  onChange={(e) => {
-                    const cleaned = e.target.value.replace(/[^\d]/g, "");
-                    if (cleaned === "") {
-                      setBonusInput("");
-                      return;
-                    }
-                    const numValue = parseFloat(cleaned);
-                    setBonusInput(formatNumber(numValue));
-                  }}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      updateDailySales();
-                    }
-                  }}
-                  className={`w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-lg font-bold ${
-                    isDarkMode ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-white text-gray-900'
-                  }`}
-                  placeholder="0"
-                />
-                <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Qo'shimcha bonus summasi (masalan: 100,000 so'm)</p>
+                <div className="space-y-4">
+                  {/* Standart Oylik */}
+                  <div>
+                    <label className={`flex items-center gap-2 text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                      <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                      Standart Oylik
+                    </label>
+                    <input
+                      type="text"
+                      value={bonusInput}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[^\d]/g, "");
+                        if (cleaned === "") {
+                          setBonusInput("");
+                          return;
+                        }
+                        const numValue = parseFloat(cleaned);
+                        setBonusInput(formatNumber(numValue));
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          updateDailySales();
+                        }
+                      }}
+                      className={`w-full px-4 py-3 border-2 border-purple-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-lg font-bold ${
+                        isDarkMode ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-white text-gray-900'
+                      }`}
+                      placeholder="0"
+                    />
+                    <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      💡 Doimiy oylik bonus
+                    </p>
+                  </div>
+
+                  {/* Shaxsiy Bonus */}
+                  <div>
+                    <label className={`flex items-center gap-2 text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                      <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                      Shaxsiy Bonus
+                    </label>
+                    <input
+                      type="text"
+                      value={personalBonusInput}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[^\d]/g, "");
+                        if (cleaned === "") {
+                          setPersonalBonusInput("");
+                          return;
+                        }
+                        const numValue = parseFloat(cleaned);
+                        setPersonalBonusInput(formatNumber(numValue));
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          updateDailySales();
+                        }
+                      }}
+                      className={`w-full px-4 py-3 border-2 border-indigo-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg font-bold ${
+                        isDarkMode ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-white text-gray-900'
+                      }`}
+                      placeholder="0"
+                    />
+                    <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      💡 Shaxsiy yutuqlar uchun mukofot
+                    </p>
+                  </div>
+
+                  {/* Jamoaviy Abyom Bonusi */}
+                  <div>
+                    <label className={`flex items-center gap-2 text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                      <span className="w-2 h-2 rounded-full bg-teal-500"></span>
+                      Jamoaviy Abyom Bonusi
+                    </label>
+                    <input
+                      type="text"
+                      value={teamVolumeBonusInput}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[^\d]/g, "");
+                        if (cleaned === "") {
+                          setTeamVolumeBonusInput("");
+                          return;
+                        }
+                        const numValue = parseFloat(cleaned);
+                        setTeamVolumeBonusInput(formatNumber(numValue));
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          updateDailySales();
+                        }
+                      }}
+                      className={`w-full px-4 py-3 border-2 border-teal-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-lg font-bold ${
+                        isDarkMode ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-white text-gray-900'
+                      }`}
+                      placeholder="0"
+                    />
+                    <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      💡 Jamoa natijasi uchun mukofot
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Hisoblash ko'rsatish */}
-              {(dailySalesInput || wholesaleSalesInput || (bonusInput && parseFloat(bonusInput.replace(/,/g, "")) > 0)) && (
-                <div className="bg-gradient-to-br from-orange-50 to-yellow-50 rounded-lg p-4 border-2 border-[#F87819]">
-                  <p className="text-xs font-bold text-gray-900 mb-2">Taxminiy oylik:</p>
-                  <div className="space-y-1 text-xs text-gray-700">
+              {(dailySalesInput || wholesaleSalesInput || (bonusInput && parseFloat(bonusInput.replace(/,/g, "")) > 0) || (personalBonusInput && parseFloat(personalBonusInput.replace(/,/g, "")) > 0) || (teamVolumeBonusInput && parseFloat(teamVolumeBonusInput.replace(/,/g, "")) > 0)) && (
+                <div className="bg-gradient-to-br from-orange-50 to-yellow-50 rounded-xl p-5 border-2 border-[#F87819]">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-5 h-5 text-[#F87819]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <p className="text-sm font-bold text-gray-900">Taxminiy Oylik Hisob</p>
+                  </div>
+                  
+                  <div className="space-y-2 text-sm text-gray-700">
                     {dailySalesInput && (
-                      <div className="flex justify-between">
-                        <span>Chakana:</span>
+                      <div className="flex justify-between items-center py-1">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                          Chakana:
+                        </span>
                         <span className="font-bold text-green-600">
                           {formatMoney((parseFloat(dailySalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100)}
                         </span>
                       </div>
                     )}
                     {wholesaleSalesInput && (
-                      <div className="flex justify-between">
-                        <span>Optom (÷2):</span>
+                      <div className="flex justify-between items-center py-1">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                          Optom (÷2):
+                        </span>
                         <span className="font-bold text-blue-600">
                           {formatMoney((parseFloat(wholesaleSalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100 / 2)}
                         </span>
                       </div>
                     )}
                     {bonusInput && parseFloat(bonusInput.replace(/,/g, "")) > 0 && (
-                      <div className="flex justify-between">
-                        <span>Standart oylik:</span>
+                      <div className="flex justify-between items-center py-1">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                          Standart oylik:
+                        </span>
                         <span className="font-bold text-purple-600">
                           + {formatMoney(parseFloat(bonusInput.replace(/,/g, "")) || 0)}
                         </span>
                       </div>
                     )}
-                    <div className="flex justify-between pt-2 border-t border-orange-300">
-                      <span className="font-bold">Jami:</span>
-                      <span className="font-bold text-[#F87819]">
+                    {personalBonusInput && parseFloat(personalBonusInput.replace(/,/g, "")) > 0 && (
+                      <div className="flex justify-between items-center py-1">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                          Shaxsiy bonus:
+                        </span>
+                        <span className="font-bold text-indigo-600">
+                          + {formatMoney(parseFloat(personalBonusInput.replace(/,/g, "")) || 0)}
+                        </span>
+                      </div>
+                    )}
+                    {teamVolumeBonusInput && parseFloat(teamVolumeBonusInput.replace(/,/g, "")) > 0 && (
+                      <div className="flex justify-between items-center py-1">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-teal-500"></span>
+                          Jamoaviy abyom:
+                        </span>
+                        <span className="font-bold text-teal-600">
+                          + {formatMoney(parseFloat(teamVolumeBonusInput.replace(/,/g, "")) || 0)}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-between items-center pt-3 mt-3 border-t-2 border-orange-300">
+                      <span className="font-bold text-base">JAMI OYLIK:</span>
+                      <span className="font-bold text-xl text-[#F87819]">
                         {formatMoney(
                           ((parseFloat(dailySalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100) +
                           ((parseFloat(wholesaleSalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100 / 2) +
-                          (parseFloat(bonusInput.replace(/,/g, "")) || 0)
+                          (parseFloat(bonusInput.replace(/,/g, "")) || 0) +
+                          (parseFloat(personalBonusInput.replace(/,/g, "")) || 0) +
+                          (parseFloat(teamVolumeBonusInput.replace(/,/g, "")) || 0)
                         )}
                       </span>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">* Vazifalar foizisiz hisoblangan</p>
+                  
+                  <div className="mt-3 pt-3 border-t border-orange-200">
+                    <p className="text-xs text-gray-600 flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Vazifalar foizisiz hisoblangan. Vazifalar bajarilishiga qarab kamayishi mumkin.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
@@ -3031,6 +3252,8 @@ export default function App() {
                   setDailySalesInput("");
                   setWholesaleSalesInput("");
                   setBonusInput("");
+                  setPersonalBonusInput("");
+                  setTeamVolumeBonusInput("");
                 }}
                 className={`flex-1 px-4 py-3 border-2 text-sm font-bold rounded-xl transition-all ${
                   isDarkMode 

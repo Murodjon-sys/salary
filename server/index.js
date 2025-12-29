@@ -38,7 +38,9 @@ const employeeSchema = new mongoose.Schema({
   dailySales: { type: Number, default: 0 }, // Kunlik chakana savdo
   wholesaleSales: { type: Number, default: 0 }, // Kunlik optom savdo
   lastSalesDate: { type: String, default: null }, // Oxirgi savdo kiritilgan sana (YYYY-MM-DD)
-  fixedBonus: { type: Number, default: 0 } // Standart oylik (bonus)
+  fixedBonus: { type: Number, default: 0 }, // Standart oylik (bonus)
+  personalBonus: { type: Number, default: 0 }, // Shaxsiy bonus (individual bonus)
+  teamVolumeBonus: { type: Number, default: 0 } // Jamoaviy abyom bonusi (team volume bonus)
 });
 
 const branchSchema = new mongoose.Schema({
@@ -69,7 +71,9 @@ const dailySalesHistorySchema = new mongoose.Schema({
     dailyTasks: { type: mongoose.Schema.Types.Mixed }, // Dynamic object: { taskId: boolean }
     salary: { type: Number }, // Hisoblangan oylik
     penaltyAmount: { type: Number, default: 0 }, // Xodimdan ayrilgan jarima
-    fixedBonus: { type: Number, default: 0 } // Standart oylik (bonus)
+    fixedBonus: { type: Number, default: 0 }, // Standart oylik (bonus)
+    personalBonus: { type: Number, default: 0 }, // Shaxsiy bonus
+    teamVolumeBonus: { type: Number, default: 0 } // Jamoaviy abyom bonusi
   }]
 }, { timestamps: true });
 
@@ -302,7 +306,9 @@ app.get('/api/branches', async (req, res) => {
             dailySales: dailySales,
             wholesaleSales: wholesaleSales,
             lastSalesDate: emp.lastSalesDate,
-            fixedBonus: emp.fixedBonus || 0
+            fixedBonus: emp.fixedBonus || 0,
+            personalBonus: emp.personalBonus || 0,
+            teamVolumeBonus: emp.teamVolumeBonus || 0
           };
         }));
         
@@ -401,7 +407,9 @@ app.put('/api/employees/:id', async (req, res) => {
   try {
     console.log(`🔄 Updating employee ${req.params.id}:`, {
       name: req.body.name,
-      fixedBonus: req.body.fixedBonus
+      fixedBonus: req.body.fixedBonus,
+      personalBonus: req.body.personalBonus,
+      teamVolumeBonus: req.body.teamVolumeBonus
     });
     
     const updateData = { 
@@ -419,17 +427,37 @@ app.put('/api/employees/:id', async (req, res) => {
       console.log(`  ✅ Setting fixedBonus to ${req.body.fixedBonus}`);
     }
     
+    // Agar personalBonus berilgan bo'lsa, uni ham yangilaymiz
+    if (req.body.personalBonus !== undefined) {
+      updateData.personalBonus = req.body.personalBonus;
+      console.log(`  ✅ Setting personalBonus to ${req.body.personalBonus}`);
+    }
+    
+    // Agar teamVolumeBonus berilgan bo'lsa, uni ham yangilaymiz
+    if (req.body.teamVolumeBonus !== undefined) {
+      updateData.teamVolumeBonus = req.body.teamVolumeBonus;
+      console.log(`  ✅ Setting teamVolumeBonus to ${req.body.teamVolumeBonus}`);
+    }
+    
     // Agar dailySales yoki wholesaleSales yangilansa, bugungi sanani saqlaymiz
     if (req.body.dailySales !== undefined || req.body.wholesaleSales !== undefined) {
       const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
       updateData.lastSalesDate = today;
     }
     
+    console.log(`💾 Saving to MongoDB:`, updateData);
+    
     const employee = await Employee.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true }
     );
+    
+    console.log(`✅ Saved successfully! Employee bonuses:`, {
+      fixedBonus: employee.fixedBonus,
+      personalBonus: employee.personalBonus,
+      teamVolumeBonus: employee.teamVolumeBonus
+    });
     res.json({
       id: employee._id.toString(),
       name: employee.name,
@@ -439,7 +467,9 @@ app.put('/api/employees/:id', async (req, res) => {
       dailySales: employee.dailySales,
       wholesaleSales: employee.wholesaleSales,
       lastSalesDate: employee.lastSalesDate,
-      fixedBonus: employee.fixedBonus || 0
+      fixedBonus: employee.fixedBonus || 0,
+      personalBonus: employee.personalBonus || 0,
+      teamVolumeBonus: employee.teamVolumeBonus || 0
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -780,6 +810,10 @@ app.post('/api/history/save-daily', async (req, res) => {
         
         // Standart oylik (fixedBonus) qo'shamiz
         salary += (emp.fixedBonus || 0);
+        // Shaxsiy bonus qo'shamiz
+        salary += (emp.personalBonus || 0);
+        // Jamoaviy abyom bonusi qo'shamiz
+        salary += (emp.teamVolumeBonus || 0);
       } else {
         // Boshqa xodimlar uchun chakana va optom savdodan hisoblash
         const retailSalary = (branch.retailSales || 0) * emp.percentage / 100;
@@ -803,6 +837,10 @@ app.post('/api/history/save-daily', async (req, res) => {
         
         // Standart oylik (fixedBonus) qo'shamiz
         salary += (emp.fixedBonus || 0);
+        // Shaxsiy bonus qo'shamiz
+        salary += (emp.personalBonus || 0);
+        // Jamoaviy abyom bonusi qo'shamiz
+        salary += (emp.teamVolumeBonus || 0);
       }
       
       return {
@@ -815,7 +853,9 @@ app.post('/api/history/save-daily', async (req, res) => {
         dailyTasks: emp.dailyTasks,
         salary: salary,
         penaltyAmount: penaltyAmount,
-        fixedBonus: emp.fixedBonus || 0 // Standart oylik qo'shamiz
+        fixedBonus: emp.fixedBonus || 0, // Standart oylik qo'shamiz
+        personalBonus: emp.personalBonus || 0, // Shaxsiy bonus qo'shamiz
+        teamVolumeBonus: emp.teamVolumeBonus || 0 // Jamoaviy abyom bonusi qo'shamiz
       };
     });
     
@@ -877,9 +917,11 @@ app.post('/api/history/save-daily', async (req, res) => {
         dailySales: 0,
         wholesaleSales: 0,
         lastSalesDate: null,
-        fixedBonus: 0
+        fixedBonus: 0,
+        personalBonus: 0,
+        teamVolumeBonus: 0
       });
-      console.log(`  ✅ Reset: ${emp.name} (fixedBonus: ${emp.fixedBonus} → 0)`);
+      console.log(`  ✅ Reset: ${emp.name} - Barcha ma'lumotlar 0 ga qaytarildi (tarixga saqlandi)`);
     }
     
     console.log('✅ All employees reset successfully');

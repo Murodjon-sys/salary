@@ -10,6 +10,8 @@ export type Employee = {
   wholesaleSales?: number; // Kunlik optom savdo
   lastSalesDate?: string; // Oxirgi savdo kiritilgan sana (YYYY-MM-DD)
   fixedBonus?: number; // Standart oylik (bonus)
+  personalBonus?: number; // Shaxsiy bonus (individual bonus)
+  teamVolumeBonus?: number; // Jamoaviy abyom bonusi (team volume bonus)
 };
 
 export type Branch = {

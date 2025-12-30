@@ -1,6 +1,28 @@
 import { useState, useEffect } from "react";
 import { api, type Branch, type Employee } from "./api";
 
+// O'zbek tilida sana formatlash funksiyasi
+const formatUzbekDate = (dateString: string) => {
+  const date = new Date(dateString);
+  
+  const months = [
+    'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+    'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'
+  ];
+  
+  const weekdays = [
+    'Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 
+    'Payshanba', 'Juma', 'Shanba'
+  ];
+  
+  const day = date.getDate();
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  const weekday = weekdays[date.getDay()];
+  
+  return `${day}-${month}, ${year}, ${weekday}`;
+};
+
 // Standart lavozimlar
 const defaultPositions = [
   { id: "ishchi", name: "Ishchi", color: "bg-gray-100 text-gray-800 border-2 border-gray-300" },
@@ -53,6 +75,7 @@ export default function App() {
   // Hisobotlar uchun state
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [monthlyReports, setMonthlyReports] = useState<any[]>([]);
+  const [showAllEmployees, setShowAllEmployees] = useState(false); // Barcha xodimlarni ko'rsatish
 
   const [taskTemplates, setTaskTemplates] = useState<any[]>([]);
   const [selectedPosition, setSelectedPosition] = useState<string>("sotuvchi");
@@ -1828,7 +1851,24 @@ export default function App() {
                   <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
                     {currentBranch.employees
                       .sort((a, b) => {
-                        // Lavozimlar tartibi: Manager → Kassir → Shofir → Ishchi → Sotuvchi → Ta'minotchi
+                        // Asosiy Sklad uchun alohida tartib
+                        if (currentBranch.name === "Asosiy Sklad") {
+                          const positionOrder: Record<string, number> = {
+                            'taminotchi': 1,
+                            'manager': 2,
+                            'shofir': 3,
+                            'ishchi': 4,
+                            'sotuvchi': 5,
+                            'kassir': 6
+                          };
+                          
+                          const orderA = positionOrder[a.position] || 999;
+                          const orderB = positionOrder[b.position] || 999;
+                          
+                          return orderA - orderB;
+                        }
+                        
+                        // Boshqa filiallar uchun: Manager → Kassir → Shofir → Ishchi → Sotuvchi → Ta'minotchi
                         const positionOrder: Record<string, number> = {
                           'manager': 1,
                           'kassir': 2,
@@ -2240,12 +2280,7 @@ export default function App() {
                         <div className="mb-4">
                           <div className="flex items-center justify-between mb-2">
                             <h3 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                              {new Date(record.date).toLocaleDateString('uz-UZ', { 
-                                year: 'numeric', 
-                                month: 'short', 
-                                day: 'numeric',
-                                weekday: 'short'
-                              })}
+                              {formatUzbekDate(record.date)}
                             </h3>
                             <svg className={`w-5 h-5 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -2849,25 +2884,43 @@ export default function App() {
             <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className={`block text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>2. Xodimni tanlang</label>
-                <select
-                  value={selectedEmployee?.id || ""}
-                  onChange={(e) => {
-                    const emp = currentBranch.employees.find(emp => emp.id === e.target.value);
-                    setSelectedEmployee(emp || null);
-                  }}
-                  className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F87819] focus:border-[#F87819] font-medium ${
-                    isDarkMode 
-                      ? 'border-gray-700 bg-gray-800 text-white' 
-                      : 'border-gray-300 bg-white text-gray-900'
-                  }`}
-                >
-                  <option value="">-- Xodimni tanlang --</option>
-                  {currentBranch.employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} ({positions.find(p => p.id === emp.position)?.name || emp.position})
-                    </option>
-                  ))}
-                </select>
+                <div className="flex gap-3">
+                  <select
+                    value={selectedEmployee?.id || ""}
+                    onChange={(e) => {
+                      const emp = currentBranch.employees.find(emp => emp.id === e.target.value);
+                      setSelectedEmployee(emp || null);
+                      setShowAllEmployees(false);
+                    }}
+                    className={`flex-1 px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F87819] focus:border-[#F87819] font-medium ${
+                      isDarkMode 
+                        ? 'border-gray-700 bg-gray-800 text-white' 
+                        : 'border-gray-300 bg-white text-gray-900'
+                    }`}
+                  >
+                    <option value="">-- Xodimni tanlang --</option>
+                    {currentBranch.employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} ({positions.find(p => p.id === emp.position)?.name || emp.position})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => {
+                      setShowAllEmployees(true);
+                      setSelectedEmployee(null);
+                    }}
+                    className={`px-6 py-3 rounded-xl font-bold transition-all whitespace-nowrap ${
+                      showAllEmployees
+                        ? 'bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white shadow-lg'
+                        : isDarkMode
+                        ? 'bg-gray-700 text-white hover:bg-gray-600'
+                        : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
+                    }`}
+                  >
+                    Barchasi
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -2898,8 +2951,106 @@ export default function App() {
               </div>
             </div>
 
-            {/* Step 3: Xodim hisoboti */}
-            {selectedEmployee && monthlyReports.length > 0 ? (() => {
+            {/* Step 3: Xodim hisoboti yoki Barcha xodimlar hisoboti */}
+            {showAllEmployees && monthlyReports.length > 0 ? (() => {
+              // Barcha xodimlarning ma'lumotlarini yig'ish
+              const allEmployeesData = currentBranch.employees.map(employee => {
+                const employeeData = {
+                  id: employee.id,
+                  name: employee.name,
+                  position: employee.position,
+                  totalSalary: 0,
+                  totalRetailSales: 0,
+                  totalWholesaleSales: 0,
+                  totalPenalty: 0,
+                  daysWorked: 0
+                };
+
+                monthlyReports.forEach(record => {
+                  const empRecord = record.employees.find((e: any) => e.employeeId === employee.id);
+                  if (empRecord) {
+                    employeeData.totalSalary += empRecord.salary || 0;
+                    employeeData.totalRetailSales += empRecord.dailySales || 0;
+                    employeeData.totalWholesaleSales += empRecord.wholesaleSales || 0;
+                    employeeData.totalPenalty += empRecord.penaltyAmount || 0;
+                    employeeData.daysWorked += 1;
+                  }
+                });
+
+                return employeeData;
+              });
+
+              return (
+                <div className={`rounded-xl border-2 overflow-hidden ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                  <div className="px-6 py-4 bg-gradient-to-r from-[#F87819] to-[#ff8c3a]">
+                    <h2 className="text-xl font-bold text-white">Barcha xodimlar hisoboti</h2>
+                    <p className="text-sm text-white/80 mt-1">{currentBranch.name} - {selectedMonth}</p>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className={`border-b ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-100 border-gray-200'}`}>
+                        <tr>
+                          <th className={`px-6 py-3 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Xodim</th>
+                          <th className={`px-6 py-3 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Lavozim</th>
+                          <th className={`px-6 py-3 text-right text-xs font-bold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Kunlar</th>
+                          <th className={`px-6 py-3 text-right text-xs font-bold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Chakana</th>
+                          <th className={`px-6 py-3 text-right text-xs font-bold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Optom</th>
+                          <th className={`px-6 py-3 text-right text-xs font-bold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Jami Oylik</th>
+                          <th className={`px-6 py-3 text-right text-xs font-bold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Jarima</th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                        {allEmployeesData.map((empData) => (
+                          <tr key={empData.id} className={`transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{empData.name}</span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold ${positionColors[empData.position] || 'bg-gray-200 text-gray-800'}`}>
+                                {positions.find(p => p.id === empData.position)?.name || empData.position}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>{empData.daysWorked}</span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              <span className="text-sm font-bold text-green-600">{formatMoney(empData.totalRetailSales)}</span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              <span className="text-sm font-bold text-blue-600">{formatMoney(empData.totalWholesaleSales)}</span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              <span className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{formatMoney(empData.totalSalary)}</span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              <span className="text-sm font-bold text-red-600">{formatMoney(empData.totalPenalty)}</span>
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className={`font-bold ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                          <td colSpan={3} className="px-6 py-4 text-right">
+                            <span className={`text-sm font-bold uppercase ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>JAMI:</span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                            <span className="text-sm font-bold text-green-600">{formatMoney(allEmployeesData.reduce((sum, emp) => sum + emp.totalRetailSales, 0))}</span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                            <span className="text-sm font-bold text-blue-600">{formatMoney(allEmployeesData.reduce((sum, emp) => sum + emp.totalWholesaleSales, 0))}</span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                            <span className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{formatMoney(allEmployeesData.reduce((sum, emp) => sum + emp.totalSalary, 0))}</span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                            <span className="text-sm font-bold text-red-600">{formatMoney(allEmployeesData.reduce((sum, emp) => sum + emp.totalPenalty, 0))}</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })() : selectedEmployee && monthlyReports.length > 0 ? (() => {
               // Tanlangan xodimning ma'lumotlarini yig'ish
               const employeeData = {
                 name: selectedEmployee.name,
@@ -2998,7 +3149,7 @@ export default function App() {
                             <tr key={index} className={`transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                                  {new Date(record.date).toLocaleDateString('uz-UZ', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                  {formatUzbekDate(record.date)}
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-right">
@@ -4103,12 +4254,7 @@ export default function App() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-xl font-bold text-white">
-                    {new Date(selectedHistoryRecord.date).toLocaleDateString('uz-UZ', { 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric',
-                      weekday: 'long'
-                    })}
+                    {formatUzbekDate(selectedHistoryRecord.date)}
                   </h3>
                   <p className="text-sm text-gray-300 mt-1">
                     {branches.find(b => b._id === selectedHistoryRecord.branchId)?.name || 'Filial'}
@@ -4572,7 +4718,7 @@ export default function App() {
                 <div className="flex-1">
                   <p className={`text-base font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Rostdan ham o'chirmoqchimisiz?</p>
                   <p className={`text-sm mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                    {new Date(historyToDelete.date).toLocaleDateString('uz-UZ')} - {branches.find(b => b._id === historyToDelete.branchId)?.name}
+                    {formatUzbekDate(historyToDelete.date)} - {branches.find(b => b._id === historyToDelete.branchId)?.name}
                   </p>
                   <p className="text-xs text-red-600 font-semibold mt-2">Bu amalni qaytarib bo'lmaydi.</p>
                 </div>

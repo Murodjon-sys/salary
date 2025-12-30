@@ -20,7 +20,7 @@ defaultPositions.forEach(pos => {
 export default function App() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [activeBranch, setActiveBranch] = useState(0);
-  const [activeView, setActiveView] = useState<"branches" | "history" | "penalties" | "tasks" | "reports" | "plans">("branches");
+  const [activeView, setActiveView] = useState<"branches" | "history" | "penalties" | "tasks" | "reports" | "plans" | "planHistory">("branches");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [userRole, setUserRole] = useState<'admin' | 'manager' | 'gijduvon_manager' | 'navoi_manager'>('admin');
@@ -88,6 +88,13 @@ export default function App() {
   const [dailySalesInput, setDailySalesInput] = useState("");
   const [wholesaleSalesInput, setWholesaleSalesInput] = useState("");
   const [loading, setLoading] = useState(true);
+  
+  // Oylik plan tarixi uchun state
+  const [monthlyPlanHistory, setMonthlyPlanHistory] = useState<any[]>([]);
+  const [selectedPlanBranch, setSelectedPlanBranch] = useState<string | null>(null);
+  const [selectedPlanMonth, setSelectedPlanMonth] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [showPlanHistoryModal, setShowPlanHistoryModal] = useState(false);
+  const [selectedPlanRecord, setSelectedPlanRecord] = useState<any | null>(null);
 
   // Lavozimlarni serverdan yuklash
   useEffect(() => {
@@ -289,6 +296,28 @@ export default function App() {
       }
     } catch (error) {
       console.error('Vazifa shablonlarini yuklashda xato:', error);
+    }
+  };
+
+  // Oylik plan tarixini yuklash
+  const loadMonthlyPlanHistory = async (branchId?: string) => {
+    try {
+      if (branchId) {
+        // Bitta filial uchun
+        const result = await api.getMonthlyPlanHistory(branchId, undefined, undefined, 12);
+        if (result.ok) {
+          setMonthlyPlanHistory(result.history);
+        }
+      } else {
+        // Barcha filiallar uchun
+        const result = await api.getAllMonthlyPlanHistory();
+        if (result.ok) {
+          setMonthlyPlanHistory(result.history);
+        }
+      }
+    } catch (error) {
+      console.error('Oylik plan tarixini yuklashda xato:', error);
+      setMonthlyPlanHistory([]);
     }
   };
 
@@ -1018,77 +1047,140 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <>
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex flex-col">
-          {/* Navbar */}
-          <nav className="w-full px-6 lg:px-12 py-6 border-b border-gray-800">
+        <div className="h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex flex-col overflow-hidden">
+          {/* Modern Navbar */}
+          <nav className="w-full px-4 sm:px-6 lg:px-12 py-3 backdrop-blur-xl bg-gray-900/50 border-b border-gray-700/50">
             <div className="max-w-7xl mx-auto flex items-center justify-between">
-              {/* Logo */}
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F87819] to-[#ff8c3a] p-0.5">
-                  <img 
-                    src="/logo.png" 
-                    alt="Logo" 
-                    className="w-full h-full rounded-xl object-cover bg-white"
-                  />
+              {/* Logo Section */}
+              <div className="flex items-center gap-3 group">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#F87819] to-[#ff8c3a] rounded-xl blur-md opacity-50 group-hover:opacity-75 transition-opacity"></div>
+                  <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-[#F87819] to-[#ff8c3a] p-0.5 shadow-lg">
+                    <div className="w-full h-full rounded-xl bg-white p-1.5">
+                      <img 
+                        src="/logo.png" 
+                        alt="Logo" 
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <span className="text-xl font-semibold text-white">Alibobo</span>
+                <div className="hidden sm:block">
+                  <span className="text-lg font-bold text-white tracking-tight">Alibobo</span>
+                  <p className="text-xs text-gray-400 -mt-0.5">Boshqaruv Tizimi</p>
+                </div>
               </div>
 
-              {/* Kirish tugmasi */}
-              <button
-                onClick={() => setShowLoginModal(true)}
-                className="px-6 py-2.5 rounded-lg text-sm font-medium transition-all bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white hover:shadow-lg hover:shadow-orange-500/50"
-              >
-                Kirish
-              </button>
+              {/* Right Side - Actions */}
+              <div className="flex items-center gap-3">
+                {/* Login Button */}
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="group relative px-5 py-2 rounded-xl text-sm font-bold transition-all overflow-hidden"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#F87819] to-[#ff8c3a] transition-transform group-hover:scale-105"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#ff8c3a] to-[#F87819] opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <span className="relative text-white flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                    </svg>
+                    <span className="hidden sm:inline">Kirish</span>
+                  </span>
+                </button>
+              </div>
             </div>
           </nav>
 
-          {/* Hero Section */}
-          <div className="flex-1 flex items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
-            <div className="max-w-6xl mx-auto w-full">
-              {/* Logo - Square & Balanced */}
-              <div className="mb-12 sm:mb-16 md:mb-20 flex justify-center">
-                <div className="w-64 h-64 sm:w-72 sm:h-72 md:w-80 md:h-80 lg:w-96 lg:h-96 xl:w-[28rem] xl:h-[28rem] rounded-3xl bg-gradient-to-br from-[#F87819] to-[#ff8c3a] p-1.5 shadow-2xl">
-                  <img 
-                    src="/logo.png" 
-                    alt="Alibobo Logo" 
-                    className="w-full h-full rounded-3xl object-cover bg-white"
-                  />
-                </div>
-              </div>
-
-              {/* Features - 3ta Card */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 max-w-5xl mx-auto px-4">
-                <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700 hover:border-[#F87819] transition-all">
-                  <div className="w-12 h-12 bg-gradient-to-br from-[#F87819] to-[#ff8c3a] rounded-xl flex items-center justify-center mb-4 mx-auto">
-                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
+          {/* Hero Section - Horizontal Layout */}
+          <div className="flex-1 flex items-center px-4 sm:px-6 lg:px-12 overflow-hidden">
+            <div className="max-w-7xl mx-auto w-full h-full flex items-center">
+              <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center w-full">
+                
+                {/* Left Side - Content */}
+                <div className="text-center lg:text-left space-y-6">
+                  {/* Badge */}
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#F87819]/20 to-[#ff8c3a]/20 border border-[#F87819]/30">
+                    <span className="w-2 h-2 rounded-full bg-[#F87819] animate-pulse"></span>
+                    <span className="text-sm font-medium text-[#F87819]">Zamonaviy Boshqaruv Tizimi</span>
                   </div>
-                  <h3 className="text-lg font-bold text-white mb-2 text-center">Xodimlar Boshqaruvi</h3>
-                  <p className="text-sm text-gray-400 text-center">Barcha xodimlarning oyligini bir joyda boshqaring</p>
+
+                  {/* Main Heading */}
+                  <div className="space-y-3">
+                    <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-white leading-tight">
+                      Oylik Hisoblash
+                      <span className="block bg-gradient-to-r from-[#F87819] to-[#ff8c3a] bg-clip-text text-transparent">
+                        Oson va Tez
+                      </span>
+                    </h1>
+                    <p className="text-base sm:text-lg text-gray-400 max-w-xl mx-auto lg:mx-0">
+                      Xodimlar, savdo va bonuslarni bir joyda boshqaring. Avtomatik hisoblash va real-time hisobotlar.
+                    </p>
+                  </div>
+
+                  {/* CTA Buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
+                    <button
+                      onClick={() => setShowLoginModal(true)}
+                      className="group px-6 py-3 rounded-xl text-sm font-bold transition-all bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white hover:shadow-2xl hover:shadow-orange-500/50 hover:scale-105 flex items-center justify-center gap-2"
+                    >
+                      <span>Boshlash</span>
+                      <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => setShowLoginModal(true)}
+                      className="px-6 py-3 rounded-xl text-sm font-bold transition-all bg-gray-800/50 text-white border-2 border-gray-700 hover:border-[#F87819] hover:bg-gray-800"
+                    >
+                      Demo Ko'rish
+                    </button>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-4 pt-6 border-t border-gray-800">
+                    <div>
+                      <div className="text-2xl font-bold text-white mb-1">3+</div>
+                      <div className="text-xs text-gray-400">Filiallar</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-white mb-1">50+</div>
+                      <div className="text-xs text-gray-400">Xodimlar</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-white mb-1">24/7</div>
+                      <div className="text-xs text-gray-400">Ishlaydi</div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700 hover:border-[#F87819] transition-all">
-                  <div className="w-12 h-12 bg-gradient-to-br from-[#F87819] to-[#ff8c3a] rounded-xl flex items-center justify-center mb-4 mx-auto">
-                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
+                {/* Right Side - Logo Card Only (Larger) */}
+                <div className="relative flex items-center justify-center">
+                  {/* Decorative Elements */}
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-[#F87819]/10 rounded-full blur-3xl animate-pulse"></div>
+                  
+                  {/* Logo Card - Large and Centered */}
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-[#F87819] to-[#ff8c3a] rounded-[3rem] blur-2xl opacity-30 animate-pulse"></div>
+                    <div className="relative bg-gradient-to-br from-gray-900 to-gray-800 rounded-[3rem] p-8 sm:p-10 lg:p-12 border-2 border-gray-700 shadow-2xl hover:shadow-orange-500/30 transition-all duration-500">
+                      <div className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 lg:w-80 lg:h-80 rounded-3xl bg-gradient-to-br from-[#F87819] to-[#ff8c3a] p-1.5 shadow-2xl">
+                        <div className="w-full h-full rounded-3xl bg-white p-6 sm:p-8 flex items-center justify-center">
+                          <img 
+                            src="/logo.png" 
+                            alt="Alibobo Logo" 
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Logo Title */}
+                      <div className="mt-6 text-center">
+                        <h3 className="text-3xl sm:text-4xl font-bold text-white mb-2">Alibobo</h3>
+                        <p className="text-base sm:text-lg text-gray-400">Qurilish Materiallari</p>
+                      </div>
+                    </div>
                   </div>
-                  <h3 className="text-lg font-bold text-white mb-2 text-center">Savdo Hisobotlari</h3>
-                  <p className="text-sm text-gray-400 text-center">Kunlik va oylik savdo statistikasini kuzating</p>
                 </div>
 
-                <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700 hover:border-[#F87819] transition-all">
-                  <div className="w-12 h-12 bg-gradient-to-br from-[#F87819] to-[#ff8c3a] rounded-xl flex items-center justify-center mb-4 mx-auto">
-                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-bold text-white mb-2 text-center">Jarima Nazorati</h3>
-                  <p className="text-sm text-gray-400 text-center">Jarimalar jamg'armasini avtomatik hisoblang</p>
-                </div>
               </div>
             </div>
           </div>
@@ -1513,7 +1605,8 @@ export default function App() {
              activeView === "history" ? "Tarix" :
              activeView === "penalties" ? "Jarimalar" : 
              activeView === "reports" ? "Hisobotlar" :
-             activeView === "plans" ? "Oylik Plan" : "Kunlik Ishlar"}
+             activeView === "plans" ? "Oylik Plan" :
+             activeView === "planHistory" ? "Oylik Plan Tarixi" : "Kunlik Ishlar"}
           </h1>
           {/* Dark Mode Toggle - Mobile */}
           <button
@@ -2050,9 +2143,62 @@ export default function App() {
         {activeView === "history" && (
           <div className="w-full mx-auto p-4 md:p-6 lg:p-8 max-w-[1920px]">
             {/* Tarix sahifasi */}
-            <div className="mb-8">
-              <h1 className={`text-2xl font-semibold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Savdo Tarixi</h1>
-              <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Barcha filiallar - Oxirgi 30 kun</p>
+            <div className="mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h1 className={`text-2xl font-semibold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Savdo Tarixi</h1>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Barcha filiallar - Oxirgi 30 kun</p>
+              </div>
+              
+              {/* Tugmalar */}
+              <div className="flex items-center gap-3">
+                {/* Oylik Planni Tarixga Saqlash (Admin uchun) */}
+                {isAuthenticated && userRole === 'admin' && (
+                  <button
+                    onClick={async () => {
+                      if (confirm('Oylik planni hozir tarixga saqlashni xohlaysizmi?\n\nBarcha filiallarning oylik plan ma\'lumotlari saqlanadi va keyingi oy uchun reset qilinadi.')) {
+                        try {
+                          const response = await fetch('/api/monthly-plan/auto-save-now', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' }
+                          });
+                          const result = await response.json();
+                          if (result.ok) {
+                            alert('✅ Oylik plan tarixga saqlandi!\n\nEndi "Oylik Plan Tarixi" sahifasida ko\'rishingiz mumkin.');
+                            await loadBranches();
+                          } else {
+                            alert('❌ Xato: ' + result.error);
+                          }
+                        } catch (error) {
+                          alert('❌ Xato yuz berdi: ' + (error as Error).message);
+                        }
+                      }
+                    }}
+                    className="px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-green-500/30 transition-all flex items-center gap-2 text-sm"
+                    title="Oylik planni tarixga saqlash"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                    <span className="hidden sm:inline">Oylik Plan Saqlash</span>
+                    <span className="sm:hidden">Saqlash</span>
+                  </button>
+                )}
+                
+                {/* Oylik Plan Tarixi tugmasi */}
+                <button
+                  onClick={() => {
+                    setActiveView("planHistory");
+                    loadMonthlyPlanHistory();
+                  }}
+                  className="px-4 py-2.5 bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-orange-500/30 transition-all flex items-center gap-2 text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span className="hidden sm:inline">Oylik Plan Tarixi</span>
+                  <span className="sm:hidden">Plan Tarixi</span>
+                </button>
+              </div>
             </div>
 
             {history.length === 0 ? (
@@ -2469,6 +2615,178 @@ export default function App() {
           </div>
         )}
 
+        {/* Oylik Plan Tarixi Sahifasi */}
+        {activeView === "planHistory" && (
+          <div className="w-full mx-auto p-4 md:p-6 lg:p-8 max-w-[1920px]">
+            {/* Header */}
+            <div className="mb-8 flex items-center justify-between">
+              <div>
+                <h1 className={`text-2xl font-semibold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Oylik Plan Tarixi</h1>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Sotuvchilarning oylik plan bajarilishi tarixi</p>
+              </div>
+              
+              {/* Orqaga qaytish tugmasi */}
+              <button
+                onClick={() => setActiveView("history")}
+                className={`px-4 py-2 rounded-xl font-semibold transition-all flex items-center gap-2 ${
+                  isDarkMode 
+                    ? 'bg-gray-800 text-white hover:bg-gray-700' 
+                    : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Orqaga
+              </button>
+            </div>
+
+            {/* Filiallarni tanlash */}
+            <div className="mb-8">
+              <h2 className={`text-lg font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Filialni tanlang</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {branches
+                  .filter(b => b.name !== "Asosiy Sklad")
+                  .map((branch) => (
+                    <button
+                      key={branch._id}
+                      onClick={() => {
+                        setSelectedPlanBranch(branch._id);
+                        loadMonthlyPlanHistory(branch._id);
+                      }}
+                      className={`rounded-xl border-2 p-6 text-left transition-all ${
+                        selectedPlanBranch === branch._id
+                          ? 'border-[#F87819] bg-gradient-to-br from-orange-50 to-red-50 shadow-lg'
+                          : isDarkMode
+                            ? 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                            : 'border-gray-200 bg-white hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className={`text-lg font-bold ${
+                          selectedPlanBranch === branch._id 
+                            ? 'text-[#F87819]' 
+                            : isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`}>
+                          {branch.name}
+                        </h3>
+                        {selectedPlanBranch === branch._id && (
+                          <svg className="w-6 h-6 text-[#F87819]" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </div>
+                      <p className={`text-sm ${
+                        selectedPlanBranch === branch._id 
+                          ? 'text-orange-700' 
+                          : isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                      }`}>
+                        {branch.employees.filter(e => e.position === 'sotuvchi').length} sotuvchi
+                      </p>
+                    </button>
+                  ))}
+              </div>
+            </div>
+
+            {/* Tarix yozuvlari */}
+            {selectedPlanBranch && (
+              <div>
+                <h2 className={`text-lg font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  Tarix ({monthlyPlanHistory.length} oy)
+                </h2>
+                
+                {monthlyPlanHistory.length === 0 ? (
+                  <div className={`rounded-lg border p-12 text-center ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                    <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                      <svg className={`w-8 h-8 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <p className={`text-base font-medium mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Tarix topilmadi</p>
+                    <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Hali oylik plan tarixi saqlanmagan</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {monthlyPlanHistory.map((record) => {
+                      const completedCount = record.sellers.filter((s: any) => s.planCompleted).length;
+                      const totalBonus = record.sellers.reduce((sum: number, s: any) => sum + (s.planBonus || 0), 0);
+                      
+                      return (
+                        <div 
+                          key={record._id} 
+                          onClick={() => {
+                            setSelectedPlanRecord(record);
+                            setShowPlanHistoryModal(true);
+                          }}
+                          className={`rounded-xl border-2 p-6 hover:shadow-xl transition-all cursor-pointer ${
+                            isDarkMode 
+                              ? 'bg-gray-800 border-gray-700 hover:border-[#F87819]' 
+                              : 'bg-white border-gray-200 hover:border-gray-900'
+                          }`}
+                        >
+                          <div className="mb-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                                {new Date(record.month + '-01').toLocaleDateString('uz-UZ', { 
+                                  year: 'numeric', 
+                                  month: 'long'
+                                })}
+                              </h3>
+                              <svg className={`w-5 h-5 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className={`rounded-lg p-3 border ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+                              <p className={`text-xs font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Plan bajarganlar</p>
+                              <p className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                                {completedCount} / {record.sellers.length}
+                              </p>
+                            </div>
+
+                            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-3 border-2 border-green-500">
+                              <p className="text-xs text-green-700 font-semibold">Jami bonus</p>
+                              <p className="text-lg font-bold text-green-700">
+                                {formatMoney(totalBonus)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className={`pt-3 mt-3 border-t flex items-center justify-between ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                            <p className={`text-xs font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                              {record.sellers.length} sotuvchi
+                            </p>
+                            {isAuthenticated && userRole === 'admin' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm('Ushbu oylik plan tarixini o\'chirmoqchimisiz?')) {
+                                    api.deleteMonthlyPlanHistory(record._id).then(() => {
+                                      loadMonthlyPlanHistory(selectedPlanBranch);
+                                    });
+                                  }
+                                }}
+                                className="w-8 h-8 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-colors flex items-center justify-center"
+                                title="O'chirish"
+                              >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Hisobotlar Sahifasi */}
         {activeView === "reports" && (
           <div className="w-full mx-auto p-4 md:p-6 lg:p-8 max-w-[1920px]">
@@ -2725,13 +3043,47 @@ export default function App() {
         {activeView === "plans" && (
           <div className="w-full mx-auto p-4 md:p-6 lg:p-8 max-w-[1920px]">
             {/* Header */}
-            <div className="mb-8">
-              <h1 className={`text-3xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                Oylik Plan
-              </h1>
-              <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                Sotuvchilar uchun oylik plan va bonuslar
-              </p>
+            <div className="mb-8 flex items-center justify-between">
+              <div>
+                <h1 className={`text-3xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  Oylik Plan
+                </h1>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Sotuvchilar uchun oylik plan va bonuslar
+                </p>
+              </div>
+              
+              {/* Qo'lda saqlash tugmasi (Admin uchun) */}
+              {isAuthenticated && userRole === 'admin' && (
+                <button
+                  onClick={async () => {
+                    if (confirm('Oylik planni hozir tarixga saqlashni xohlaysizmi?\n\nDiqqat: Bu amal faqat test uchun. Tizim avtomatik ravishda har oyning oxirgi kunida saqlaydi.')) {
+                      try {
+                        const response = await fetch('/api/monthly-plan/auto-save-now', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' }
+                        });
+                        const result = await response.json();
+                        if (result.ok) {
+                          alert('✅ Oylik plan tarixga saqlandi!');
+                          await loadBranches();
+                        } else {
+                          alert('❌ Xato: ' + result.error);
+                        }
+                      } catch (error) {
+                        alert('❌ Xato yuz berdi: ' + (error as Error).message);
+                      }
+                    }
+                  }}
+                  className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-green-500/30 transition-all flex items-center gap-2"
+                  title="Oylik planni qo'lda tarixga saqlash (test uchun)"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                  </svg>
+                  Tarixga Saqlash
+                </button>
+              )}
             </div>
 
             {/* Filiallar tanlash */}
@@ -3883,6 +4235,171 @@ export default function App() {
                 onClick={() => {
                   setShowHistoryModal(false);
                   setSelectedHistoryRecord(null);
+                }}
+                className="w-full px-4 py-3 bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all"
+              >
+                Yopish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Oylik Plan Tarixi Tafsilotlari */}
+      {showPlanHistoryModal && selectedPlanRecord && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={`rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+            <div className="px-6 py-5 bg-gradient-to-b from-gray-900 to-gray-800">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-white">
+                    {new Date(selectedPlanRecord.month + '-01').toLocaleDateString('uz-UZ', { 
+                      year: 'numeric', 
+                      month: 'long'
+                    })}
+                  </h3>
+                  <p className="text-sm text-gray-300 mt-1">
+                    {branches.find(b => b._id === selectedPlanRecord.branchId)?.name || 'Filial'} - Oylik Plan
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowPlanHistoryModal(false);
+                    setSelectedPlanRecord(null);
+                  }}
+                  className="text-gray-300 hover:text-white transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <p className="text-sm text-blue-600 mb-1">Jami sotuvchilar</p>
+                  <p className="text-2xl font-semibold text-blue-900">
+                    {selectedPlanRecord.sellers.length}
+                  </p>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4">
+                  <p className="text-sm text-green-600 mb-1">Plan bajarganlar</p>
+                  <p className="text-2xl font-semibold text-green-900">
+                    {selectedPlanRecord.sellers.filter((s: any) => s.planCompleted).length}
+                  </p>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-4">
+                  <p className="text-sm text-orange-600 mb-1">Jami bonus</p>
+                  <p className="text-2xl font-semibold text-orange-900">
+                    {formatMoney(selectedPlanRecord.sellers.reduce((sum: number, s: any) => sum + (s.planBonus || 0), 0))}
+                  </p>
+                </div>
+              </div>
+
+              {/* Desktop: Jadval */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead className={`border-b ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+                    <tr>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Sotuvchi</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Plan</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Savdo</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Holat</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Bonus</th>
+                    </tr>
+                  </thead>
+                  <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                    {selectedPlanRecord.sellers.map((seller: any) => (
+                      <tr key={seller.employeeId} className={isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}>
+                        <td className={`px-4 py-3 text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{seller.name}</td>
+                        <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>
+                          {formatMoney(seller.monthlyPlan)}
+                        </td>
+                        <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>
+                          {formatMoney(seller.monthlyRetailSales)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {seller.planCompleted ? (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                              ✓ Bajarildi
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                              ✗ Bajarilmadi
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-semibold text-green-600">
+                          {formatMoney(seller.planBonus)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: Card ko'rinishi */}
+              <div className="md:hidden space-y-3">
+                {selectedPlanRecord.sellers.map((seller: any) => (
+                  <div 
+                    key={seller.employeeId} 
+                    className={`rounded-xl border-2 p-4 ${
+                      seller.planCompleted
+                        ? 'bg-green-50 border-green-500'
+                        : isDarkMode 
+                          ? 'bg-gray-700 border-gray-600' 
+                          : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className={`font-bold text-base ${isDarkMode && !seller.planCompleted ? 'text-white' : 'text-gray-900'}`}>
+                        {seller.name}
+                      </h4>
+                      {seller.planCompleted ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-green-600 text-white">
+                          ✓ Bajarildi
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                          ✗ Bajarilmadi
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className={isDarkMode && !seller.planCompleted ? 'text-gray-400' : 'text-gray-600'}>Plan:</span>
+                        <span className={`font-semibold ${isDarkMode && !seller.planCompleted ? 'text-white' : 'text-gray-900'}`}>
+                          {formatMoney(seller.monthlyPlan)}
+                        </span>
+                      </div>
+                      
+                      <div className="flex justify-between text-sm">
+                        <span className={isDarkMode && !seller.planCompleted ? 'text-gray-400' : 'text-gray-600'}>Savdo:</span>
+                        <span className={`font-semibold ${isDarkMode && !seller.planCompleted ? 'text-white' : 'text-gray-900'}`}>
+                          {formatMoney(seller.monthlyRetailSales)}
+                        </span>
+                      </div>
+                      
+                      <div className={`flex justify-between text-sm pt-2 border-t ${seller.planCompleted ? 'border-green-300' : isDarkMode ? 'border-gray-600' : 'border-gray-200'}`}>
+                        <span className={`font-bold ${isDarkMode && !seller.planCompleted ? 'text-gray-300' : 'text-gray-700'}`}>Bonus:</span>
+                        <span className="font-bold text-green-600 text-base">
+                          {formatMoney(seller.planBonus)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`px-6 py-4 border-t ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+              <button
+                onClick={() => {
+                  setShowPlanHistoryModal(false);
+                  setSelectedPlanRecord(null);
                 }}
                 className="w-full px-4 py-3 bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all"
               >

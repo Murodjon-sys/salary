@@ -84,9 +84,24 @@ const dailySalesHistorySchema = new mongoose.Schema({
   }]
 }, { timestamps: true });
 
+// Oylik plan tarixi schema
+const monthlyPlanHistorySchema = new mongoose.Schema({
+  month: { type: String, required: true }, // YYYY-MM
+  branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true },
+  sellers: [{
+    employeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
+    name: { type: String },
+    monthlyPlan: { type: Number, default: 500000000 },
+    monthlyRetailSales: { type: Number, default: 0 },
+    planCompleted: { type: Boolean, default: false },
+    planBonus: { type: Number, default: 0 }
+  }]
+}, { timestamps: true });
+
 const Employee = mongoose.model('Employee', employeeSchema);
 const Branch = mongoose.model('Branch', branchSchema);
 const DailySalesHistory = mongoose.model('DailySalesHistory', dailySalesHistorySchema);
+const MonthlyPlanHistory = mongoose.model('MonthlyPlanHistory', monthlyPlanHistorySchema);
 const TaskTemplate = mongoose.model('TaskTemplate', taskTemplateSchema);
 const Position = mongoose.model('Position', positionSchema);
 
@@ -1442,4 +1457,323 @@ app.post('/api/migrate-history-fixedbonus', async (req, res) => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server ${PORT} portda ishlamoqda`);
+  
+  // Oylik planni avtomatik saqlash uchun tekshirish
+  startMonthlyPlanAutoSave();
+});
+
+// ============================================
+// OYLIK PLANNI AVTOMATIK SAQLASH
+// ============================================
+
+// Har kuni soat 23:00 da tekshirish (oyning oxirgi kunida saqlash)
+function startMonthlyPlanAutoSave() {
+  console.log('📅 Oylik plan avtomatik saqlash tizimi ishga tushdi');
+  
+  // Har kuni soat 23:00 da tekshirish
+  setInterval(async () => {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    
+    // Soat 23:00 da tekshirish
+    if (hour === 23 && minute === 0) {
+      await checkAndSaveMonthlyPlan();
+    }
+  }, 60000); // Har daqiqada tekshirish
+  
+  // Server ishga tushganda ham tekshirish
+  checkAndSaveMonthlyPlan();
+}
+
+async function checkAndSaveMonthlyPlan() {
+  try {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Agar ertaga yangi oy boshlansa (bugun oyning oxirgi kuni)
+    if (tomorrow.getDate() === 1) {
+      console.log('🎯 Bugun oyning oxirgi kuni! Oylik planni saqlash boshlandi...');
+      
+      const currentMonth = today.toISOString().slice(0, 7); // YYYY-MM
+      
+      // Barcha filiallar uchun oylik planni saqlash
+      const branches = await Branch.find({ name: { $ne: 'Asosiy Sklad' } });
+      
+      let savedCount = 0;
+      let completedSellers = 0;
+      let totalBonus = 0;
+      
+      for (const branch of branches) {
+        const employees = await Employee.find({ 
+          branchId: branch._id, 
+          position: 'sotuvchi' 
+        });
+        
+        if (employees.length === 0) continue;
+        
+        // Sotuvchilar ma'lumotlarini tayyorlaymiz
+        const sellersData = employees.map(emp => {
+          const monthlyPlan = emp.monthlyPlan || 500000000;
+          const monthlyRetailSales = emp.monthlyRetailSales || 0;
+          const planCompleted = monthlyRetailSales >= monthlyPlan;
+          const planBonus = planCompleted ? 1000000 : 0;
+          
+          if (planCompleted) completedSellers++;
+          totalBonus += planBonus;
+          
+          return {
+            employeeId: emp._id,
+            name: emp.name,
+            monthlyPlan: monthlyPlan,
+            monthlyRetailSales: monthlyRetailSales,
+            planCompleted: planCompleted,
+            planBonus: planBonus
+          };
+        });
+        
+        // Tarixda shu oy uchun yozuv bormi tekshiramiz
+        const existing = await MonthlyPlanHistory.findOne({ 
+          month: currentMonth, 
+          branchId: branch._id 
+        });
+        
+        if (existing) {
+          // Mavjud bo'lsa, yangilaymiz
+          existing.sellers = sellersData;
+          await existing.save();
+          console.log(`  ✅ ${branch.name}: Yangilandi (${sellersData.length} sotuvchi)`);
+        } else {
+          // Yo'q bo'lsa, yangi yaratamiz
+          const history = new MonthlyPlanHistory({
+            month: currentMonth,
+            branchId: branch._id,
+            sellers: sellersData
+          });
+          await history.save();
+          console.log(`  ✅ ${branch.name}: Saqlandi (${sellersData.length} sotuvchi)`);
+        }
+        
+        // Sotuvchilarning planBonus'ini yangilaymiz va monthlyRetailSales'ni 0 ga qaytaramiz
+        for (const emp of employees) {
+          const monthlyPlan = emp.monthlyPlan || 500000000;
+          const monthlyRetailSales = emp.monthlyRetailSales || 0;
+          const planCompleted = monthlyRetailSales >= monthlyPlan;
+          const planBonus = planCompleted ? 1000000 : 0;
+          
+          await Employee.findByIdAndUpdate(emp._id, {
+            planBonus: planBonus,
+            monthlyRetailSales: 0 // Keyingi oy uchun reset
+          });
+        }
+        
+        savedCount++;
+      }
+      
+      console.log(`\n🎉 Oylik plan saqlash yakunlandi:`);
+      console.log(`   📊 Filiallar: ${savedCount}`);
+      console.log(`   ✅ Plan bajarganlar: ${completedSellers}`);
+      console.log(`   💰 Jami bonus: ${totalBonus.toLocaleString()} so'm`);
+      console.log(`   📅 Oy: ${currentMonth}\n`);
+    }
+  } catch (error) {
+    console.error('❌ Oylik planni saqlashda xato:', error);
+  }
+}
+
+// Qo'lda saqlash uchun endpoint (test uchun)
+app.post('/api/monthly-plan/auto-save-now', async (req, res) => {
+  try {
+    await checkAndSaveMonthlyPlan();
+    res.json({
+      ok: true,
+      message: 'Oylik plan saqlash jarayoni bajarildi'
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+
+// ============================================
+// OYLIK PLAN ENDPOINTS
+// ============================================
+
+// Oylik planni tarixga saqlash (oy oxirida)
+app.post('/api/monthly-plan/save', async (req, res) => {
+  try {
+    const { month, branchId } = req.body; // month format: YYYY-MM
+    const targetMonth = month || new Date().toISOString().slice(0, 7);
+    
+    console.log(`💾 Saving monthly plan for ${targetMonth}, branch: ${branchId}`);
+    
+    // Filial va xodimlarni olamiz
+    const branch = await Branch.findById(branchId);
+    if (!branch) {
+      return res.status(404).json({ ok: false, error: 'Filial topilmadi' });
+    }
+    
+    const employees = await Employee.find({ branchId: branchId, position: 'sotuvchi' });
+    
+    // Sotuvchilar ma'lumotlarini tayyorlaymiz
+    const sellersData = employees.map(emp => {
+      const monthlyPlan = emp.monthlyPlan || 500000000;
+      const monthlyRetailSales = emp.monthlyRetailSales || 0;
+      const planCompleted = monthlyRetailSales >= monthlyPlan;
+      const planBonus = planCompleted ? 1000000 : 0;
+      
+      console.log(`  📊 ${emp.name}: ${monthlyRetailSales} / ${monthlyPlan} = ${planCompleted ? '✅' : '❌'}`);
+      
+      return {
+        employeeId: emp._id,
+        name: emp.name,
+        monthlyPlan: monthlyPlan,
+        monthlyRetailSales: monthlyRetailSales,
+        planCompleted: planCompleted,
+        planBonus: planBonus
+      };
+    });
+    
+    // Tarixda shu oy uchun yozuv bormi tekshiramiz
+    const existing = await MonthlyPlanHistory.findOne({ month: targetMonth, branchId: branchId });
+    
+    if (existing) {
+      // Mavjud bo'lsa, yangilaymiz
+      existing.sellers = sellersData;
+      await existing.save();
+      console.log('✅ Monthly plan history updated');
+    } else {
+      // Yo'q bo'lsa, yangi yaratamiz
+      const history = new MonthlyPlanHistory({
+        month: targetMonth,
+        branchId: branchId,
+        sellers: sellersData
+      });
+      await history.save();
+      console.log('✅ Monthly plan history created');
+    }
+    
+    // Sotuvchilarning planBonus'ini yangilaymiz va monthlyRetailSales'ni 0 ga qaytaramiz
+    for (const emp of employees) {
+      const monthlyPlan = emp.monthlyPlan || 500000000;
+      const monthlyRetailSales = emp.monthlyRetailSales || 0;
+      const planCompleted = monthlyRetailSales >= monthlyPlan;
+      const planBonus = planCompleted ? 1000000 : 0;
+      
+      await Employee.findByIdAndUpdate(emp._id, {
+        planBonus: planBonus,
+        monthlyRetailSales: 0 // Reset uchun keyingi oy
+      });
+      
+      console.log(`  ✅ ${emp.name}: planBonus = ${planBonus}, monthlyRetailSales reset to 0`);
+    }
+    
+    res.json({
+      ok: true,
+      message: 'Oylik plan tarixga saqlandi',
+      month: targetMonth,
+      sellersCount: sellersData.length,
+      completedCount: sellersData.filter(s => s.planCompleted).length
+    });
+  } catch (error) {
+    console.error('❌ Error saving monthly plan:', error);
+    res.status(500).json({ 
+      ok: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Oylik plan tarixini olish
+app.get('/api/monthly-plan/history/:branchId', async (req, res) => {
+  try {
+    const { branchId } = req.params;
+    const { startMonth, endMonth, limit } = req.query;
+    
+    let query = { branchId: branchId };
+    
+    // Oy oralig'i bo'yicha filter
+    if (startMonth && endMonth) {
+      query.month = { $gte: startMonth, $lte: endMonth };
+    }
+    
+    const history = await MonthlyPlanHistory.find(query)
+      .sort({ month: -1 }) // Eng yangi birinchi
+      .limit(limit ? parseInt(limit) : 12) // Default: 12 oy
+      .lean();
+    
+    console.log(`📖 Reading monthly plan history for branch ${branchId}:`, {
+      recordsCount: history.length,
+      months: history.map(h => h.month)
+    });
+    
+    res.json({
+      ok: true,
+      history: history
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      ok: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Barcha filiallarning oylik plan tarixini olish
+app.get('/api/monthly-plan/history-all', async (req, res) => {
+  try {
+    const { month } = req.query;
+    
+    let query = {};
+    if (month) {
+      query.month = month;
+    }
+    
+    const history = await MonthlyPlanHistory.find(query)
+      .sort({ month: -1, branchId: 1 })
+      .populate('branchId', 'name')
+      .lean();
+    
+    res.json({
+      ok: true,
+      history: history
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      ok: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Oylik plan tarixini o'chirish
+app.delete('/api/monthly-plan/history/:historyId', async (req, res) => {
+  try {
+    const { historyId } = req.params;
+    
+    const deleted = await MonthlyPlanHistory.findByIdAndDelete(historyId);
+    
+    if (!deleted) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Tarix topilmadi'
+      });
+    }
+    
+    console.log(`Oylik plan tarixi o'chirildi: ${deleted.month}`);
+    
+    res.json({
+      ok: true,
+      message: 'Tarix o\'chirildi'
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      ok: false, 
+      error: error.message 
+    });
+  }
 });

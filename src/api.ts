@@ -259,5 +259,45 @@ export const api = {
   async getRegosDepartmentsMapping() {
     const response = await fetch(`${API_URL}/regos/departments-mapping`);
     return response.json();
+  },
+
+  // ============ OYLIK PLAN TARIXI ============
+  
+  // Oylik planni tarixga saqlash
+  async saveMonthlyPlanHistory(branchId: string, month?: string) {
+    const response = await fetch(`${API_URL}/monthly-plan/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ branchId, month })
+    });
+    return response.json();
+  },
+
+  // Oylik plan tarixini olish (bitta filial uchun)
+  async getMonthlyPlanHistory(branchId: string, startMonth?: string, endMonth?: string, limit?: number) {
+    let url = `${API_URL}/monthly-plan/history/${branchId}?`;
+    if (startMonth) url += `startMonth=${startMonth}&`;
+    if (endMonth) url += `endMonth=${endMonth}&`;
+    if (limit) url += `limit=${limit}`;
+    
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  // Barcha filiallarning oylik plan tarixini olish
+  async getAllMonthlyPlanHistory(month?: string) {
+    let url = `${API_URL}/monthly-plan/history-all`;
+    if (month) url += `?month=${month}`;
+    
+    const response = await fetch(url);
+    return response.json();
+  },
+
+  // Oylik plan tarixini o'chirish
+  async deleteMonthlyPlanHistory(historyId: string) {
+    const response = await fetch(`${API_URL}/monthly-plan/history/${historyId}`, {
+      method: 'DELETE'
+    });
+    return response.json();
   }
 };

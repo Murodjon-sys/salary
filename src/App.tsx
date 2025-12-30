@@ -947,7 +947,7 @@ export default function App() {
     }
     
     // Standart oylik (bonus) qo'shish
-    return calculatedSalary + (employee.fixedBonus || 0) + (employee.personalBonus || 0) + (employee.teamVolumeBonus || 0) + (employee.salesShareBonus || 0) + (employee.planBonus || 0);
+    return calculatedSalary + (employee.fixedBonus || 0) + (employee.personalBonus || 0) + (employee.salesShareBonus || 0) + (employee.planBonus || 0);
   };
 
   // Jarima summasini hisoblash (real-time) - BARCHA XODIMLAR UCHUN
@@ -994,7 +994,7 @@ export default function App() {
       }
     }
     
-    const actualSalary = calculateSalary(employee) - (employee.fixedBonus || 0) - (employee.personalBonus || 0) - (employee.teamVolumeBonus || 0); // Bonuslarni ayiramiz
+    const actualSalary = calculateSalary(employee) - (employee.fixedBonus || 0) - (employee.personalBonus || 0) - (employee.salesShareBonus || 0) - (employee.planBonus || 0); // Bonuslarni ayiramiz
     const penalty = baseSalary - actualSalary;
     
     console.log(`⚠️ ${currentBranch.name} - ${employee.name} JARIMA: baseSalary=${baseSalary.toFixed(2)}, actualSalary=${actualSalary.toFixed(2)}, penalty=${penalty.toFixed(2)}`);
@@ -1826,7 +1826,24 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
-                    {currentBranch.employees.map((employee) => (
+                    {currentBranch.employees
+                      .sort((a, b) => {
+                        // Lavozimlar tartibi: Manager → Shofir → Kassir → Ishchi → Sotuvchi → Ta'minotchi
+                        const positionOrder: Record<string, number> = {
+                          'manager': 1,
+                          'shofir': 2,
+                          'kassir': 3,
+                          'ishchi': 4,
+                          'sotuvchi': 5,
+                          'taminotchi': 6
+                        };
+                        
+                        const orderA = positionOrder[a.position] || 999;
+                        const orderB = positionOrder[b.position] || 999;
+                        
+                        return orderA - orderB;
+                      })
+                      .map((employee) => (
                       <tr key={`${employee.id}-${JSON.stringify(employee.dailyTasks)}`} className={`transition-colors ${
                         isDarkMode 
                           ? 'bg-gray-800 hover:bg-gray-700' 
@@ -1963,7 +1980,24 @@ export default function App() {
 
               {/* Mobile Card View */}
               <div className="lg:hidden p-4 space-y-4">
-                {currentBranch.employees.map((employee) => (
+                {currentBranch.employees
+                  .sort((a, b) => {
+                    // Lavozimlar tartibi
+                    const positionOrder: Record<string, number> = {
+                      'manager': 1,
+                      'shofir': 2,
+                      'kassir': 3,
+                      'ishchi': 4,
+                      'sotuvchi': 5,
+                      'taminotchi': 6
+                    };
+                    
+                    const orderA = positionOrder[a.position] || 999;
+                    const orderB = positionOrder[b.position] || 999;
+                    
+                    return orderA - orderB;
+                  })
+                  .map((employee) => (
                   <div 
                     key={`${employee.id}-mobile-${JSON.stringify(employee.dailyTasks)}`}
                     className={`rounded-xl border-2 shadow-lg overflow-hidden transition-all hover:shadow-xl ${
@@ -3866,7 +3900,6 @@ export default function App() {
                           ((parseFloat(wholesaleSalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100 / 2) +
                           (parseFloat(bonusInput.replace(/,/g, "")) || 0) +
                           (parseFloat(personalBonusInput.replace(/,/g, "")) || 0) +
-                          (parseFloat(teamVolumeBonusInput.replace(/,/g, "")) || 0) +
                           (parseFloat(salesShareBonusInput.replace(/,/g, "")) || 0)
                         )}
                       </span>

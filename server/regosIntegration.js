@@ -10,9 +10,6 @@ export async function getDailySalesFromRegos(date) {
   try {
     const dateFrom = `${date} 00:00:00`;
     const dateTo = `${date} 23:59:59`;
-    
-    console.log(`REGOS API: Savdo malumotlari soralmoqda (${date})`);
-    
     const response = await fetch(`${REGOS_API_URL}/Sale/Get`, {
       method: 'POST',
       headers: {
@@ -31,12 +28,9 @@ export async function getDailySalesFromRegos(date) {
     }
     
     const data = await response.json();
-    console.log(`REGOS API: ${data.result?.length || 0} ta yozuv olindi`);
-    
     return data;
     
   } catch (error) {
-    console.error('REGOS API xatosi:', error.message);
     throw error;
   }
 }
@@ -59,7 +53,6 @@ export async function getDepartmentsFromRegos() {
     return data.result || [];
     
   } catch (error) {
-    console.error('REGOS API xatosi:', error.message);
     throw error;
   }
 }
@@ -87,7 +80,6 @@ export async function getSalesByDepartment(departmentId, dateFrom, dateTo) {
     return data;
     
   } catch (error) {
-    console.error('REGOS API xatosi:', error.message);
     throw error;
   }
 }
@@ -142,8 +134,6 @@ export function processRegosSalesData(regosData) {
 
 export async function syncToMongoDB(Branch, processedData, date) {
   try {
-    console.log('MongoDB ga sinxronizatsiya boshlanmoqda...');
-    
     for (const deptData of processedData.salesByDepartment) {
       const branch = await Branch.findOne({ 
         name: { $regex: deptData.departmentName, $options: 'i' }
@@ -157,13 +147,8 @@ export async function syncToMongoDB(Branch, processedData, date) {
             wholesaleSales: deptData.wholesaleSales
           }
         });
-        
-        console.log(`  ${branch.name}: +${deptData.totalSales.toLocaleString()} som`);
       }
     }
-    
-    console.log('Sinxronizatsiya yakunlandi');
-    
     return {
       success: true,
       date: date,
@@ -172,7 +157,6 @@ export async function syncToMongoDB(Branch, processedData, date) {
     };
     
   } catch (error) {
-    console.error('MongoDB xatosi:', error.message);
     throw error;
   }
 }

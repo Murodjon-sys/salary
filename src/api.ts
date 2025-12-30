@@ -233,6 +233,14 @@ export const api = {
     return response.json();
   },
 
+  // Migration: Sotuvchilarning fixedBonus'ini tozalash
+  async clearSellerFixedBonus() {
+    const response = await fetch(`${API_URL}/migrate-clear-seller-fixedbonus`, {
+      method: 'POST'
+    });
+    return response.json();
+  },
+
   // ============ REGOS INTEGRATSIYA ============
   
   // REGOS dan kunlik savdoni sinxronizatsiya qilish

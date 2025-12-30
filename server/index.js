@@ -108,8 +108,6 @@ const Position = mongoose.model('Position', positionSchema);
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI)
   .then(async () => {
-    console.log('MongoDB ga ulandi');
-    
     // Standart lavozimlarni yaratish
     const positionCount = await Position.countDocuments();
     if (positionCount === 0) {
@@ -121,7 +119,6 @@ mongoose.connect(process.env.MONGODB_URI)
         { id: "sotuvchi", name: "Sotuvchi", color: "bg-white text-[#F87819] border-2 border-[#F87819]", isDefault: true },
         { id: "taminotchi", name: "Ta'minotchi", color: "bg-gray-700 text-white shadow-md", isDefault: true },
       ]);
-      console.log('Standart lavozimlar yaratildi');
     }
     
     // Boshlang'ich filiallarni yaratish
@@ -132,7 +129,6 @@ mongoose.connect(process.env.MONGODB_URI)
         { name: "G'ijduvon Filial", totalSales: 0 },
         { name: "Navoiy Filial", totalSales: 0 }
       ]);
-      console.log('Boshlang\'ich filiallar yaratildi');
     }
     
     // Boshlang'ich vazifa shablonlarini yaratish (faqat sotuvchi uchun)
@@ -144,10 +140,9 @@ mongoose.connect(process.env.MONGODB_URI)
         { position: 'sotuvchi', taskName: "Mahsulot kam kelgan bilishi", order: 3 },
         { position: 'sotuvchi', taskName: "Polka terish va kod yopish", order: 4 }
       ]);
-      console.log('Boshlang\'ich vazifa shablonlari yaratildi');
     }
   })
-  .catch((err) => console.error('MongoDB ulanish xatosi:', err));
+  .catch((err) => {});
 
 // Routes
 
@@ -431,13 +426,6 @@ app.post('/api/employees', async (req, res) => {
 // Xodimni yangilash
 app.put('/api/employees/:id', async (req, res) => {
   try {
-    console.log(`🔄 Updating employee ${req.params.id}:`, {
-      name: req.body.name,
-      fixedBonus: req.body.fixedBonus,
-      personalBonus: req.body.personalBonus,
-      teamVolumeBonus: req.body.teamVolumeBonus
-    });
-    
     const updateData = { 
       name: req.body.name, 
       position: req.body.position, 
@@ -448,27 +436,29 @@ app.put('/api/employees/:id', async (req, res) => {
     };
     
     // Agar fixedBonus berilgan bo'lsa, uni ham yangilaymiz
+    // MUHIM: Sotuvchilar uchun fixedBonus har doim 0 bo'lishi kerak
     if (req.body.fixedBonus !== undefined) {
-      updateData.fixedBonus = req.body.fixedBonus;
-      console.log(`  ✅ Setting fixedBonus to ${req.body.fixedBonus}`);
+      // Agar sotuvchi bo'lsa, fixedBonus ni 0 ga o'rnatamiz
+      if (req.body.position === 'sotuvchi') {
+        updateData.fixedBonus = 0;
+      } else {
+        updateData.fixedBonus = req.body.fixedBonus;
+      }
     }
     
     // Agar personalBonus berilgan bo'lsa, uni ham yangilaymiz
     if (req.body.personalBonus !== undefined) {
       updateData.personalBonus = req.body.personalBonus;
-      console.log(`  ✅ Setting personalBonus to ${req.body.personalBonus}`);
     }
     
     // Agar teamVolumeBonus berilgan bo'lsa, uni ham yangilaymiz
     if (req.body.teamVolumeBonus !== undefined) {
       updateData.teamVolumeBonus = req.body.teamVolumeBonus;
-      console.log(`  ✅ Setting teamVolumeBonus to ${req.body.teamVolumeBonus}`);
     }
     
     // Agar salesShareBonus berilgan bo'lsa, uni ham yangilaymiz
     if (req.body.salesShareBonus !== undefined) {
       updateData.salesShareBonus = req.body.salesShareBonus;
-      console.log(`  ✅ Setting salesShareBonus to ${req.body.salesShareBonus}`);
     }
     
     // Agar monthlyPlan berilgan bo'lsa, uni ham yangilaymiz
@@ -486,26 +476,19 @@ app.put('/api/employees/:id', async (req, res) => {
       updateData.planBonus = req.body.planBonus;
     }
     
-    // Agar dailySales yoki wholesaleSales yangilansa, bugungi sanani saqlaymiz
-    if (req.body.dailySales !== undefined || req.body.wholesaleSales !== undefined) {
+    // Agar lastSalesDate berilgan bo'lsa (frontend'dan), uni ishlatamiz
+    // Aks holda, agar dailySales yoki wholesaleSales yangilansa, bugungi sanani saqlaymiz
+    if (req.body.lastSalesDate !== undefined) {
+      updateData.lastSalesDate = req.body.lastSalesDate;
+    } else if (req.body.dailySales !== undefined || req.body.wholesaleSales !== undefined) {
       const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
       updateData.lastSalesDate = today;
     }
-    
-    console.log(`💾 Saving to MongoDB:`, updateData);
-    
     const employee = await Employee.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true }
     );
-    
-    console.log(`✅ Saved successfully! Employee bonuses:`, {
-      fixedBonus: employee.fixedBonus,
-      personalBonus: employee.personalBonus,
-      teamVolumeBonus: employee.teamVolumeBonus,
-      salesShareBonus: employee.salesShareBonus
-    });
     res.json({
       id: employee._id.toString(),
       name: employee.name,
@@ -644,9 +627,6 @@ app.post('/api/regos/sync-daily-sales', async (req, res) => {
   try {
     const { date } = req.body; // Format: YYYY-MM-DD
     const targetDate = date || new Date().toISOString().split('T')[0];
-    
-    console.log(`🔄 REGOS sinxronizatsiya boshlandi: ${targetDate}`);
-    
     // 1. REGOS API dan ma'lumot olish
     const regosData = await regosService.getDailySales(targetDate);
     
@@ -663,7 +643,6 @@ app.post('/api/regos/sync-daily-sales', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ REGOS sinxronizatsiya xatosi:', error);
     res.status(500).json({ 
       ok: false, 
       error: error.message 
@@ -676,9 +655,6 @@ app.post('/api/regos/sync-from-json', async (req, res) => {
   try {
     const { date } = req.body;
     const targetDate = date || new Date().toISOString().split('T')[0];
-    
-    console.log(`📄 JSON fayldan sinxronizatsiya: ${targetDate}`);
-    
     // 1. JSON faylni o'qish
     const jsonData = await regosService.readJsonFile(targetDate);
     
@@ -702,7 +678,6 @@ app.post('/api/regos/sync-from-json', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ JSON sinxronizatsiya xatosi:', error);
     res.status(500).json({ 
       ok: false, 
       error: error.message 
@@ -828,8 +803,6 @@ app.post('/api/history/save-daily', async (req, res) => {
     let totalPenalty = 0; // Jami jarima summasi
     const employeesData = employees.map(emp => {
       // DEBUG: Xodimning fixedBonus qiymatini ko'ramiz
-      console.log(`📊 ${emp.name} - fixedBonus: ${emp.fixedBonus || 0}`);
-      
       // Oylikni hisoblaymiz
       let salary = 0;
       let penaltyAmount = 0;
@@ -923,15 +896,8 @@ app.post('/api/history/save-daily', async (req, res) => {
     });
     
     // DEBUG: Tarixga saqlanayotgan ma'lumotlarni ko'ramiz
-    console.log('💾 Saving to history:', {
-      date: targetDate,
-      branchId: branchId,
-      employeesCount: employeesData.length,
-      employeesWithBonus: employeesData.filter(e => e.fixedBonus > 0).length
-    });
-    employeesData.forEach(emp => {
+        employeesData.forEach(emp => {
       if (emp.fixedBonus > 0) {
-        console.log(`  ✅ ${emp.name}: fixedBonus = ${emp.fixedBonus}`);
       }
     });
     
@@ -946,7 +912,6 @@ app.post('/api/history/save-daily', async (req, res) => {
       existing.penaltyAmount = totalPenalty;
       existing.employees = employeesData;
       await existing.save();
-      console.log('✅ History updated successfully');
     } else {
       // Yo'q bo'lsa, yangi yaratamiz
       const history = new DailySalesHistory({
@@ -959,7 +924,6 @@ app.post('/api/history/save-daily', async (req, res) => {
         employees: employeesData
       });
       await history.save();
-      console.log('✅ History created successfully');
     }
     
     // Jarimani filialning jamg'armasiga qo'shamiz
@@ -969,12 +933,8 @@ app.post('/api/history/save-daily', async (req, res) => {
     
     // Tarixga saqlagandan keyin ma'lumotlarni 0 ga qaytaramiz
     // 1. BARCHA xodimlarning kunlik savdosini va bonusini 0 ga qilamiz
-    console.log('🔄 Resetting employee data...');
-    
     // Har bir xodimni alohida yangilash (updateMany ishlamasa)
     const employeesToReset = await Employee.find({ branchId: branchId });
-    console.log(`📊 Found ${employeesToReset.length} employees to reset`);
-    
     for (const emp of employeesToReset) {
       // Plan bonusini tekshirish (faqat sotuvchilar uchun)
       let planBonusToSave = 0;
@@ -986,22 +946,31 @@ app.post('/api/history/save-daily', async (req, res) => {
         }
       }
       
+      // Kunlik vazifalarni false ga qaytarish
+      const resetTasks = {};
+      if (emp.dailyTasks && typeof emp.dailyTasks === 'object') {
+        for (const taskId in emp.dailyTasks) {
+          resetTasks[taskId] = false; // Barcha vazifalarni false ga qaytaramiz
+        }
+      }
+      
+      // Sotuvchilar uchun fixedBonus 0 bo'lishi kerak (ular uchun fixedBonus ishlatilmaydi)
+      const fixedBonusToSave = emp.position === 'sotuvchi' ? 0 : (emp.fixedBonus || 0);
+      
       await Employee.findByIdAndUpdate(emp._id, {
         dailySales: 0,
         wholesaleSales: 0,
         lastSalesDate: null,
-        fixedBonus: 0,
+        fixedBonus: fixedBonusToSave, // Sotuvchilar uchun 0, boshqalar uchun saqlanadi
         personalBonus: 0,
         teamVolumeBonus: 0,
         salesShareBonus: 0,
         monthlyRetailSales: 0, // Oylik savdoni 0 ga qaytaramiz
-        planBonus: planBonusToSave // Plan bonusini saqlaymiz (keyingi oy uchun)
-      });
-      console.log(`  ✅ Reset: ${emp.name} - Barcha ma'lumotlar 0 ga qaytarildi (tarixga saqlandi)`);
-    }
-    
-    console.log('✅ All employees reset successfully');
-    
+        planBonus: planBonusToSave, // Plan bonusini saqlaymiz (keyingi oy uchun)
+        dailyTasks: resetTasks // Vazifalarni false ga qaytaramiz
+      }, { new: true }); // Yangilangan dokumentni qaytarish
+      
+          }
     // 2. Filialning umumiy savdosini 0 ga qilamiz
     await Branch.findByIdAndUpdate(branchId, { 
       totalSales: 0,
@@ -1040,27 +1009,6 @@ app.get('/api/history/:branchId', async (req, res) => {
       .limit(limit ? parseInt(limit) : 30)
       .lean(); // To'liq JSON formatda qaytarish
     
-    // DEBUG: Tarixdan o'qilgan ma'lumotlarni ko'ramiz
-    console.log(`📖 Reading history for branch ${branchId}:`, {
-      recordsCount: history.length,
-      dates: history.map(h => h.date)
-    });
-    
-    if (history.length > 0) {
-      const firstRecord = history[0];
-      console.log(`  First record (${firstRecord.date}):`, {
-        employeesCount: firstRecord.employees.length,
-        employeesWithBonus: firstRecord.employees.filter((e) => e.fixedBonus > 0).length
-      });
-      firstRecord.employees.forEach((emp) => {
-        console.log(`    📊 ${emp.name}:`, {
-          fixedBonus: emp.fixedBonus,
-          salary: emp.salary,
-          dailySales: emp.dailySales
-        });
-      });
-    }
-    
     res.json({
       ok: true,
       history: history
@@ -1086,9 +1034,6 @@ app.delete('/api/history/:historyId', async (req, res) => {
         error: 'Tarix topilmadi'
       });
     }
-    
-    console.log(`Tarix o'chirildi: ${deleted.date}`);
-    
     res.json({
       ok: true,
       message: 'Tarix o\'chirildi'
@@ -1454,10 +1399,39 @@ app.post('/api/migrate-history-fixedbonus', async (req, res) => {
   }
 });
 
+// Migration: Sotuvchilarning fixedBonus'ini 0 ga o'zgartirish
+app.post('/api/migrate-clear-seller-fixedbonus', async (req, res) => {
+  try {
+    // Barcha sotuvchilarni topamiz
+    const sellers = await Employee.find({ position: 'sotuvchi' });
+    
+    let updatedCount = 0;
+    
+    for (const seller of sellers) {
+      // Agar fixedBonus 0 dan katta bo'lsa, 0 ga o'zgartiramiz
+      if (seller.fixedBonus && seller.fixedBonus > 0) {
+        seller.fixedBonus = 0;
+        await seller.save();
+        updatedCount++;
+      }
+    }
+    
+    res.json({
+      ok: true,
+      message: `${updatedCount} ta sotuvchining fixedBonus'i tozalandi`,
+      totalSellers: sellers.length,
+      updatedSellers: updatedCount
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Server ${PORT} portda ishlamoqda`);
-  
   // Oylik planni avtomatik saqlash uchun tekshirish
   startMonthlyPlanAutoSave();
 });
@@ -1468,8 +1442,6 @@ app.listen(PORT, () => {
 
 // Har kuni soat 23:00 da tekshirish (oyning oxirgi kunida saqlash)
 function startMonthlyPlanAutoSave() {
-  console.log('📅 Oylik plan avtomatik saqlash tizimi ishga tushdi');
-  
   // Har kuni soat 23:00 da tekshirish
   setInterval(async () => {
     const now = new Date();
@@ -1494,8 +1466,6 @@ async function checkAndSaveMonthlyPlan() {
     
     // Agar ertaga yangi oy boshlansa (bugun oyning oxirgi kuni)
     if (tomorrow.getDate() === 1) {
-      console.log('🎯 Bugun oyning oxirgi kuni! Oylik planni saqlash boshlandi...');
-      
       const currentMonth = today.toISOString().slice(0, 7); // YYYY-MM
       
       // Barcha filiallar uchun oylik planni saqlash
@@ -1543,8 +1513,7 @@ async function checkAndSaveMonthlyPlan() {
           // Mavjud bo'lsa, yangilaymiz
           existing.sellers = sellersData;
           await existing.save();
-          console.log(`  ✅ ${branch.name}: Yangilandi (${sellersData.length} sotuvchi)`);
-        } else {
+                  } else {
           // Yo'q bo'lsa, yangi yaratamiz
           const history = new MonthlyPlanHistory({
             month: currentMonth,
@@ -1552,8 +1521,7 @@ async function checkAndSaveMonthlyPlan() {
             sellers: sellersData
           });
           await history.save();
-          console.log(`  ✅ ${branch.name}: Saqlandi (${sellersData.length} sotuvchi)`);
-        }
+                  }
         
         // Sotuvchilarning planBonus'ini yangilaymiz va monthlyRetailSales'ni 0 ga qaytaramiz
         for (const emp of employees) {
@@ -1570,15 +1538,8 @@ async function checkAndSaveMonthlyPlan() {
         
         savedCount++;
       }
-      
-      console.log(`\n🎉 Oylik plan saqlash yakunlandi:`);
-      console.log(`   📊 Filiallar: ${savedCount}`);
-      console.log(`   ✅ Plan bajarganlar: ${completedSellers}`);
-      console.log(`   💰 Jami bonus: ${totalBonus.toLocaleString()} so'm`);
-      console.log(`   📅 Oy: ${currentMonth}\n`);
-    }
+          }
   } catch (error) {
-    console.error('❌ Oylik planni saqlashda xato:', error);
   }
 }
 
@@ -1608,9 +1569,6 @@ app.post('/api/monthly-plan/save', async (req, res) => {
   try {
     const { month, branchId } = req.body; // month format: YYYY-MM
     const targetMonth = month || new Date().toISOString().slice(0, 7);
-    
-    console.log(`💾 Saving monthly plan for ${targetMonth}, branch: ${branchId}`);
-    
     // Filial va xodimlarni olamiz
     const branch = await Branch.findById(branchId);
     if (!branch) {
@@ -1625,9 +1583,6 @@ app.post('/api/monthly-plan/save', async (req, res) => {
       const monthlyRetailSales = emp.monthlyRetailSales || 0;
       const planCompleted = monthlyRetailSales >= monthlyPlan;
       const planBonus = planCompleted ? 1000000 : 0;
-      
-      console.log(`  📊 ${emp.name}: ${monthlyRetailSales} / ${monthlyPlan} = ${planCompleted ? '✅' : '❌'}`);
-      
       return {
         employeeId: emp._id,
         name: emp.name,
@@ -1645,7 +1600,6 @@ app.post('/api/monthly-plan/save', async (req, res) => {
       // Mavjud bo'lsa, yangilaymiz
       existing.sellers = sellersData;
       await existing.save();
-      console.log('✅ Monthly plan history updated');
     } else {
       // Yo'q bo'lsa, yangi yaratamiz
       const history = new MonthlyPlanHistory({
@@ -1654,7 +1608,6 @@ app.post('/api/monthly-plan/save', async (req, res) => {
         sellers: sellersData
       });
       await history.save();
-      console.log('✅ Monthly plan history created');
     }
     
     // Sotuvchilarning planBonus'ini yangilaymiz va monthlyRetailSales'ni 0 ga qaytaramiz
@@ -1668,8 +1621,6 @@ app.post('/api/monthly-plan/save', async (req, res) => {
         planBonus: planBonus,
         monthlyRetailSales: 0 // Reset uchun keyingi oy
       });
-      
-      console.log(`  ✅ ${emp.name}: planBonus = ${planBonus}, monthlyRetailSales reset to 0`);
     }
     
     res.json({
@@ -1680,7 +1631,6 @@ app.post('/api/monthly-plan/save', async (req, res) => {
       completedCount: sellersData.filter(s => s.planCompleted).length
     });
   } catch (error) {
-    console.error('❌ Error saving monthly plan:', error);
     res.status(500).json({ 
       ok: false, 
       error: error.message 
@@ -1705,11 +1655,6 @@ app.get('/api/monthly-plan/history/:branchId', async (req, res) => {
       .sort({ month: -1 }) // Eng yangi birinchi
       .limit(limit ? parseInt(limit) : 12) // Default: 12 oy
       .lean();
-    
-    console.log(`📖 Reading monthly plan history for branch ${branchId}:`, {
-      recordsCount: history.length,
-      months: history.map(h => h.month)
-    });
     
     res.json({
       ok: true,
@@ -1763,9 +1708,6 @@ app.delete('/api/monthly-plan/history/:historyId', async (req, res) => {
         error: 'Tarix topilmadi'
       });
     }
-    
-    console.log(`Oylik plan tarixi o'chirildi: ${deleted.month}`);
-    
     res.json({
       ok: true,
       message: 'Tarix o\'chirildi'

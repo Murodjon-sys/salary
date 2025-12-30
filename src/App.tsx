@@ -23,6 +23,43 @@ const formatUzbekDate = (dateString: string) => {
   return `${day}-${month}, ${year}, ${weekday}`;
 };
 
+// To'liq sana va vaqtni formatlash funksiyasi
+const formatFullDateTime = () => {
+  const now = new Date();
+  
+  const months = [
+    'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+    'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'
+  ];
+  
+  const weekdays = [
+    'Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 
+    'Payshanba', 'Juma', 'Shanba'
+  ];
+  
+  const day = now.getDate();
+  const month = months[now.getMonth()];
+  const year = now.getFullYear();
+  const weekday = weekdays[now.getDay()];
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  
+  return {
+    date: `${day}-${month}, ${year}`,
+    weekday: weekday,
+    time: `${hours}:${minutes}:${seconds}`
+  };
+};
+
+// Saqlangan vaqtni formatlash funksiyasi
+const formatSavedTime = (dateString: string) => {
+  const date = new Date(dateString);
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
 // Standart lavozimlar
 const defaultPositions = [
   { id: "ishchi", name: "Ishchi", color: "bg-gray-100 text-gray-800 border-2 border-gray-300" },
@@ -48,11 +85,20 @@ export default function App() {
   const [userRole, setUserRole] = useState<'admin' | 'manager' | 'gijduvon_manager' | 'navoi_manager'>('admin');
   const [allowedBranchId, setAllowedBranchId] = useState<string | null>(null); // Manager uchun ruxsat berilgan filial
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showLoginSuccessNotification, setShowLoginSuccessNotification] = useState(false);
   const [showSuccessNotification, setShowSuccessNotification] = useState(false);
+  const [successNotificationMessage, setSuccessNotificationMessage] = useState("");
+  const [showErrorNotification, setShowErrorNotification] = useState(false);
+  const [errorNotificationMessage, setErrorNotificationMessage] = useState("");
+  const [showInfoNotification, setShowInfoNotification] = useState(false);
+  const [infoNotificationMessage, setInfoNotificationMessage] = useState("");
   const [loginInput, setLoginInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [loginError, setLoginError] = useState("");
   const [showAddEmployee, setShowAddEmployee] = useState(false);
+  
+  // Hozirgi sana va vaqt uchun state
+  const [currentDateTime, setCurrentDateTime] = useState(formatFullDateTime());
   const [showEditEmployee, setShowEditEmployee] = useState(false);
   const [showTasksModal, setShowTasksModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -119,6 +165,35 @@ export default function App() {
   const [showPlanHistoryModal, setShowPlanHistoryModal] = useState(false);
   const [selectedPlanRecord, setSelectedPlanRecord] = useState<any | null>(null);
 
+  // Hisobotlarni o'chirish uchun state
+  const [showDeleteReportConfirm, setShowDeleteReportConfirm] = useState(false);
+  const [reportToDelete, setReportToDelete] = useState<any | null>(null);
+  const [deleteReportCode, setDeleteReportCode] = useState("");
+
+  // Har bir filial uchun tanlangan sana
+  const [selectedDates, setSelectedDates] = useState<Record<string, string>>({});
+
+  // Tarixni tahrirlashni bloklash uchun state
+  const [isHistoryLocked, setIsHistoryLocked] = useState(true); // Default: yoniq (bloklangan)
+
+  // Tarix modalida tahrirlash uchun state
+  const [editingHistoryEmployee, setEditingHistoryEmployee] = useState<any | null>(null);
+  const [showEditHistoryModal, setShowEditHistoryModal] = useState(false);
+  const [editHistorySalary, setEditHistorySalary] = useState("");
+  
+  // Tahrirlash uchun to'liq ma'lumotlar
+  const [editHistoryRetailSales, setEditHistoryRetailSales] = useState("");
+  const [editHistoryWholesaleSales, setEditHistoryWholesaleSales] = useState("");
+  const [editHistoryPercentage, setEditHistoryPercentage] = useState("");
+  const [editHistoryFixedBonus, setEditHistoryFixedBonus] = useState("");
+  const [editHistoryPersonalBonus, setEditHistoryPersonalBonus] = useState("");
+  
+  // Xato va muvaffaqiyat modallari
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+
   // Lavozimlarni serverdan yuklash
   useEffect(() => {
     loadPositions();
@@ -135,7 +210,6 @@ export default function App() {
         });
       }
     } catch (error) {
-      console.error('Lavozimlarni yuklashda xato:', error);
       // Xato bo'lsa, standart lavozimlarni ishlatamiz
       setPositions(defaultPositions);
     }
@@ -159,11 +233,10 @@ export default function App() {
         setNewPositionColor("bg-blue-500 text-white shadow-md");
         setShowAddPosition(false);
       } else {
-        alert(result.error || 'Lavozim qo\'shishda xato yuz berdi');
+        showErrorNotif(result.error || 'Lavozim qo\'shishda xato yuz berdi');
       }
     } catch (error) {
-      console.error('Lavozim qo\'shishda xato:', error);
-      alert('Lavozim qo\'shishda xato yuz berdi');
+      showErrorNotif('Lavozim qo\'shishda xato yuz berdi');
     }
   };
 
@@ -172,7 +245,106 @@ export default function App() {
     loadBranches();
     // Bir martalik: eski savdo ma'lumotlarini yangilash
     migrateSales();
+    // Sotuvchilarning fixedBonus'ini tozalash (har safar)
+    clearSellerFixedBonus();
+    
+    // Avtomatik tarixga saqlash (har kuni 23:59 da)
+    const autoSaveCleanup = checkAndAutoSave();
+    
+    // Hozirgi sana va vaqtni har soniyada yangilash
+    const dateTimeInterval = setInterval(() => {
+      setCurrentDateTime(formatFullDateTime());
+    }, 1000);
+    
+    return () => {
+      clearInterval(dateTimeInterval);
+      if (autoSaveCleanup) autoSaveCleanup();
+    };
   }, []);
+
+  // Avtomatik tarixga saqlash funksiyasi
+  const checkAndAutoSave = () => {
+    let lastSavedDate = ''; // Oxirgi saqlangan sana
+    
+    const checkTime = () => {
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+      const today = now.toISOString().split('T')[0];
+      
+      // Agar soat 23:59 yoki 00:00 bo'lsa va bugun hali saqlanmagan bo'lsa
+      if ((hours === 23 && minutes === 59) || (hours === 0 && minutes === 0)) {
+        // Agar bugun allaqachon saqlanmagan bo'lsa
+        if (lastSavedDate !== today) {
+          lastSavedDate = today;
+          // Barcha filiallar uchun tarixga saqlaymiz
+          autoSaveAllBranches();
+        }
+      }
+    };
+    
+    // Har daqiqada tekshiramiz
+    const interval = setInterval(checkTime, 60000); // 60 soniya
+    
+    // Darhol bir marta tekshiramiz (agar sahifa 23:59 yoki 00:00 da ochildi bo'lsa)
+    checkTime();
+    
+    // Component unmount bo'lganda interval'ni to'xtatamiz
+    return () => clearInterval(interval);
+  };
+
+  const autoSaveAllBranches = async () => {
+    try {
+      const now = new Date();
+      const hours = now.getHours();
+      
+      // Agar soat 00:00 bo'lsa, kechagi sanani saqlaymiz
+      // Agar soat 23:59 bo'lsa, bugungi sanani saqlaymiz
+      let dateToSave;
+      if (hours === 0) {
+        // Kechagi sana
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        dateToSave = yesterday.toISOString().split('T')[0];
+      } else {
+        // Bugungi sana
+        dateToSave = now.toISOString().split('T')[0];
+      }
+      
+      let savedCount = 0;
+      let errorCount = 0;
+      
+      // Barcha filiallar uchun tarixga saqlaymiz
+      for (const branch of branches) {
+        // Agar filialda xodimlar bo'lsa
+        if (branch.employees.length > 0) {
+          try {
+            const result = await api.saveDailyHistory(branch._id, dateToSave);
+            if (result.ok) {
+              savedCount++;
+            } else {
+              errorCount++;
+            }
+          } catch (error) {
+            errorCount++;
+          }
+        }
+      }
+      
+      // Ma'lumotlarni qayta yuklaymiz
+      if (savedCount > 0) {
+        await loadBranches(true);
+        showSuccessNotif(`${savedCount} ta filial tarixga avtomatik saqlandi! (${hours === 0 ? '00:00' : '23:59'})`);
+      }
+      
+      if (errorCount > 0) {
+        showErrorNotif(`${errorCount} ta filialda xatolik yuz berdi!`);
+      }
+    } catch (error) {
+      // Umumiy xato
+      showErrorNotif('Avtomatik saqlashda xatolik yuz berdi!');
+    }
+  };
 
   // Hisobotlar sahifasiga o'tganda ma'lumotlarni yuklash
   useEffect(() => {
@@ -196,8 +368,46 @@ export default function App() {
         await loadBranches(false);
       }
     } catch (error) {
-      console.error('Migration xato:', error);
     }
+  };
+
+  const clearSellerFixedBonus = async () => {
+    try {
+      const result = await api.clearSellerFixedBonus();
+      if (result.ok && result.updatedSellers > 0) {
+        // Ma'lumotlarni qayta yuklaymiz
+        await loadBranches(false);
+      }
+    } catch (error) {
+    }
+  };
+
+  // Notification ko'rsatish funksiyalari
+  const showSuccessNotif = (message: string) => {
+    setSuccessNotificationMessage(message);
+    setShowSuccessNotification(true);
+    setTimeout(() => {
+      setShowSuccessNotification(false);
+      setSuccessNotificationMessage("");
+    }, 3000);
+  };
+
+  const showErrorNotif = (message: string) => {
+    setErrorNotificationMessage(message);
+    setShowErrorNotification(true);
+    setTimeout(() => {
+      setShowErrorNotification(false);
+      setErrorNotificationMessage("");
+    }, 3000);
+  };
+
+  const showInfoNotif = (message: string) => {
+    setInfoNotificationMessage(message);
+    setShowInfoNotification(true);
+    setTimeout(() => {
+      setShowInfoNotification(false);
+      setInfoNotificationMessage("");
+    }, 3000);
   };
 
   const handleLogin = async () => {
@@ -223,9 +433,9 @@ export default function App() {
         localStorage.setItem('isAuthenticated', 'true');
         localStorage.setItem('userRole', result.role || 'admin');
         // Success notification ko'rsatamiz
-        setShowSuccessNotification(true);
+        setShowLoginSuccessNotification(true);
         setTimeout(() => {
-          setShowSuccessNotification(false);
+          setShowLoginSuccessNotification(false);
         }, 4000); // 4 soniyadan keyin yo'qoladi
       } else {
         setLoginError(result.error || "Login yoki parol noto'g'ri");
@@ -286,7 +496,6 @@ export default function App() {
       allHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setHistory(allHistory);
     } catch (error) {
-      console.error('Tarixni yuklashda xato:', error);
     }
   };
 
@@ -306,7 +515,6 @@ export default function App() {
         setMonthlyReports([]);
       }
     } catch (error) {
-      console.error('Oylik hisobotlarni yuklashda xato:', error);
       setMonthlyReports([]);
     }
   };
@@ -318,7 +526,6 @@ export default function App() {
         setTaskTemplates(result.templates);
       }
     } catch (error) {
-      console.error('Vazifa shablonlarini yuklashda xato:', error);
     }
   };
 
@@ -339,7 +546,6 @@ export default function App() {
         }
       }
     } catch (error) {
-      console.error('Oylik plan tarixini yuklashda xato:', error);
       setMonthlyPlanHistory([]);
     }
   };
@@ -347,17 +553,12 @@ export default function App() {
   const loadBranches = async (showLoader = true) => {
     try {
       if (showLoader) setLoading(true);
-      
-      console.log('🔄 Loading branches from server...');
       const data = await api.getBranches();
-      console.log('📦 Received data:', data);
-      
-      // DEBUG: Xodimlarning fixedBonus qiymatlarini ko'ramiz
+      // DEBUG: Xodimlarning dailyTasks qiymatlarini ko'ramiz
       data.forEach((branch: Branch) => {
-        console.log(`📍 ${branch.name}:`);
         branch.employees.forEach((emp: Employee) => {
-          if (emp.fixedBonus && emp.fixedBonus > 0) {
-            console.log(`  - ${emp.name}: fixedBonus = ${emp.fixedBonus}`);
+          if (emp.dailyTasks && Object.keys(emp.dailyTasks).length > 0) {
+            const tasksStatus = Object.entries(emp.dailyTasks).map(([key, value]) => `${key}: ${value}`).join(', ');
           }
         });
       });
@@ -389,7 +590,6 @@ export default function App() {
         setBranches(data);
       }
     } catch (error) {
-      console.error("Ma'lumotlarni yuklashda xato:", error);
       // Agar server javob bermasa, bo'sh array qo'yamiz
       setBranches([]);
     } finally {
@@ -445,9 +645,10 @@ export default function App() {
               : branch
           )
         );
+        showSuccessNotif(`${employeeData.name} muvaffaqiyatli qo'shildi!`);
       }
     } catch (error) {
-      console.error("Xodim qo'shishda xato:", error);
+      showErrorNotif("Xodim qo'shishda xato yuz berdi!");
       // Xato bo'lsa, qayta yuklaymiz
       await loadBranches(false);
     }
@@ -467,6 +668,16 @@ export default function App() {
   };
 
   const openSalesModal = (employee: Employee) => {
+    // Tanlangan sanani tekshiramiz
+    const selectedDate = selectedDates[currentBranch._id] || new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Agar tanlangan sana bugungi kundan oldingi kun bo'lsa, tahrirlashga ruxsat bermaymiz
+    if (selectedDate < today) {
+      showErrorNotif('O\'tgan kunlar uchun ma\'lumot kiritish mumkin emas! Faqat bugungi kun uchun tahrirlash mumkin.');
+      return;
+    }
+    
     setSelectedEmployee(employee);
     setDailySalesInput(employee.dailySales?.toString() || "");
     setWholesaleSalesInput(employee.wholesaleSales?.toString() || "");
@@ -516,6 +727,16 @@ export default function App() {
   };
 
   const openBonusModal = (employee: Employee) => {
+    // Tanlangan sanani tekshiramiz
+    const selectedDate = selectedDates[currentBranch._id] || new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Agar tanlangan sana bugungi kundan oldingi kun bo'lsa, tahrirlashga ruxsat bermaymiz
+    if (selectedDate < today) {
+      showErrorNotif('O\'tgan kunlar uchun ma\'lumot kiritish mumkin emas! Faqat bugungi kun uchun tahrirlash mumkin.');
+      return;
+    }
+    
     setSelectedEmployee(employee);
     setBonusInput(employee.fixedBonus && employee.fixedBonus > 0 ? employee.fixedBonus.toString() : "");
     setShowBonusModal(true);
@@ -528,11 +749,18 @@ export default function App() {
     setShowBonusModal(false);
     const bonusValue = bonusInput;
     const employeeId = selectedEmployee.id;
+    const employeeName = selectedEmployee.name;
+    const employeePosition = selectedEmployee.position;
     setBonusInput("");
     setSelectedEmployee(null);
     
     try {
-      const fixedBonus = parseFloat(bonusValue.replace(/,/g, "")) || 0;
+      let fixedBonus = parseFloat(bonusValue.replace(/,/g, "")) || 0;
+      
+      // MUHIM: Sotuvchilar uchun fixedBonus har doim 0 bo'lishi kerak
+      if (employeePosition === 'sotuvchi') {
+        fixedBonus = 0;
+      }
       
       // Lokal state'ni darhol yangilaymiz (optimistik yangilanish)
       setBranches(prevBranches => 
@@ -548,14 +776,19 @@ export default function App() {
       
       // Background'da serverga saqlaymiz
       await api.updateEmployee(employeeId, {
-        name: selectedEmployee.name,
-        position: selectedEmployee.position,
+        name: employeeName,
+        position: employeePosition,
         percentage: selectedEmployee.percentage,
         fixedBonus: fixedBonus
       });
+      
+      if (employeePosition === 'sotuvchi') {
+        showSuccessNotif(`${employeeName} - Sotuvchilar uchun standart bonus 0 bo'lishi kerak!`);
+      } else {
+        showSuccessNotif(`${employeeName} bonusi saqlandi!`);
+      }
     } catch (error) {
-      console.error("Bonusni yangilashda xato:", error);
-      alert('❌ Bonusni saqlashda xato yuz berdi');
+      showErrorNotif('Bonusni saqlashda xato yuz berdi!');
       // Xato bo'lsa, qayta yuklaymiz
       await loadBranches(false);
     }
@@ -577,6 +810,10 @@ export default function App() {
     const personalBonusValue = personalBonusInput;
     const teamVolumeBonusValue = teamVolumeBonusInput;
     const salesShareBonusValue = salesShareBonusInput;
+    
+    // Tanlangan sanani olamiz
+    const selectedDate = selectedDates[currentBranch._id] || new Date().toISOString().split('T')[0];
+    
     setDailySalesInput("");
     setWholesaleSalesInput("");
     setBonusInput("");
@@ -587,32 +824,26 @@ export default function App() {
     try {
       const retailSales = parseFloat(retailValue.replace(/,/g, "")) || 0;
       const wholesaleSales = parseFloat(wholesaleValue.replace(/,/g, "")) || 0;
-      const fixedBonus = parseFloat(bonusValue.replace(/,/g, "")) || 0;
+      let fixedBonus = parseFloat(bonusValue.replace(/,/g, "")) || 0;
       const personalBonus = parseFloat(personalBonusValue.replace(/,/g, "")) || 0;
       const teamVolumeBonus = parseFloat(teamVolumeBonusValue.replace(/,/g, "")) || 0;
       const salesShareBonus = parseFloat(salesShareBonusValue.replace(/,/g, "")) || 0;
       
+      // MUHIM: Sotuvchilar uchun fixedBonus har doim 0 bo'lishi kerak
+      if (employeePosition === 'sotuvchi') {
+        fixedBonus = 0;
+      }
+      
       // Oylik chakana savdoni yangilaymiz (faqat sotuvchilar uchun)
       const currentMonthlyRetailSales = selectedEmployee.monthlyRetailSales || 0;
       const newMonthlyRetailSales = currentMonthlyRetailSales + retailSales;
-      
-      console.log('💰 Saving bonuses:', {
-        fixedBonus,
-        personalBonus,
-        teamVolumeBonus,
-        salesShareBonus,
-        retailSales,
-        wholesaleSales,
-        monthlyRetailSales: newMonthlyRetailSales
-      });
-      
       // Lokal state'ni darhol yangilaymiz
       setBranches(prevBranches => 
         prevBranches.map(branch => ({
           ...branch,
           employees: branch.employees.map(emp => 
             emp.id === employeeId 
-              ? { ...emp, dailySales: retailSales, wholesaleSales: wholesaleSales, fixedBonus: fixedBonus, personalBonus: personalBonus, teamVolumeBonus: teamVolumeBonus, salesShareBonus: salesShareBonus, monthlyRetailSales: newMonthlyRetailSales }
+              ? { ...emp, dailySales: retailSales, wholesaleSales: wholesaleSales, fixedBonus: fixedBonus, personalBonus: personalBonus, teamVolumeBonus: teamVolumeBonus, salesShareBonus: salesShareBonus, monthlyRetailSales: newMonthlyRetailSales, lastSalesDate: selectedDate }
               : emp
           )
         }))
@@ -629,22 +860,16 @@ export default function App() {
         personalBonus: personalBonus,
         teamVolumeBonus: teamVolumeBonus,
         salesShareBonus: salesShareBonus,
-        monthlyRetailSales: newMonthlyRetailSales
+        monthlyRetailSales: newMonthlyRetailSales,
+        lastSalesDate: selectedDate
       };
-      
-      console.log('📤 Sending to server:', updateData);
-      
       const result = await api.updateEmployee(employeeId, updateData);
-      
-      console.log('✅ Server response:', result);
+      showSuccessNotif(`${employeeName} savdosi saqlandi!`);
       
       // Umumiy savdoni avtomatik yangilash (background'da)
-      // MUHIM: updateTotalSales() loadBranches() ni chaqiradi
-      // Bu yangi kiritilgan bonuslarni qayta yuklaydi
       updateTotalSales();
     } catch (error) {
-      console.error("Savdoni yangilashda xato:", error);
-      alert('❌ Savdoni saqlashda xato yuz berdi');
+      showErrorNotif('Savdoni saqlashda xato yuz berdi!');
       // Xato bo'lsa, qayta yuklaymiz
       await loadBranches(false);
     }
@@ -687,10 +912,7 @@ export default function App() {
             : branch
         )
       );
-      
-      console.log('✅ Total sales updated without reloading all data');
     } catch (error) {
-      console.error('❌ Error updating total sales:', error);
     }
   };
 
@@ -715,10 +937,6 @@ export default function App() {
     
     const employeeId = selectedEmployee.id;
     const updatedTasks = { ...tasks }; // Nusxa olamiz
-    
-    console.log('🔄 Updating tasks for employee:', employeeId);
-    console.log('📋 New tasks:', updatedTasks);
-    
     // Modal'ni darhol yopamiz
     setShowTasksModal(false);
     setSelectedEmployee(null);
@@ -735,15 +953,12 @@ export default function App() {
               : emp
           )
         }));
-        console.log('✅ State updated, new branches:', newBranches);
         return newBranches;
       });
       
       // Background'da serverga saqlaymiz
       await api.updateEmployeeTasks(employeeId, updatedTasks);
-      console.log('💾 Tasks saved to server');
     } catch (error) {
-      console.error("Vazifalarni yangilashda xato:", error);
       // Xato bo'lsa, qayta yuklaymiz
       await loadBranches(false);
     }
@@ -755,6 +970,7 @@ export default function App() {
     // Modal'ni darhol yopamiz
     setShowEditEmployee(false);
     const employeeData = { ...editingEmployee };
+    const employeeName = employeeData.name;
     setEditingEmployee(null);
     setEditPercentageInput("");
     
@@ -777,8 +993,10 @@ export default function App() {
         position: employeeData.position,
         percentage: employeeData.percentage
       });
+      
+      showSuccessNotif(`${employeeName} tahrirlandi!`);
     } catch (error) {
-      console.error("Xodimni yangilashda xato:", error);
+      showErrorNotif("Xodimni tahrirlashda xato yuz berdi!");
       // Xato bo'lsa, qayta yuklaymiz
       await loadBranches(false);
     }
@@ -787,6 +1005,11 @@ export default function App() {
   const deleteEmployee = async (employeeId: string) => {
     // Modal'ni darhol yopamiz
     setShowDeleteConfirm(false);
+    
+    // Xodim nomini topamiz
+    const employee = branches.flatMap(b => b.employees).find(e => e.id === employeeId);
+    const employeeName = employee?.name || "Xodim";
+    
     setEmployeeToDelete(null);
     
     try {
@@ -800,8 +1023,10 @@ export default function App() {
       
       // Background'da serverdan o'chiramiz
       await api.deleteEmployee(employeeId);
+      
+      showSuccessNotif(`${employeeName} o'chirildi!`);
     } catch (error) {
-      console.error("Xodimni o'chirishda xato:", error);
+      showErrorNotif("Xodimni o'chirishda xato yuz berdi!");
       // Xato bo'lsa, qayta yuklaymiz
       await loadBranches(false);
     }
@@ -844,7 +1069,6 @@ export default function App() {
           await loadBranches(false);
         }
       } catch (error) {
-        console.error("Savdoni saqlashda xato:", error);
       }
     }
   };
@@ -882,16 +1106,6 @@ export default function App() {
       
       // Jami asosiy oylik
       baseSalary = retailSalary + wholesaleSalary;
-      
-      // DEBUG: Sotuvchi uchun hisoblash
-      console.log(`🛒 ${currentBranch.name} - ${employee.name} (sotuvchi):`, {
-        retailSales,
-        wholesaleSales,
-        percentage,
-        retailSalary,
-        wholesaleSalary,
-        baseSalary
-      });
     } else {
       // Boshqa xodimlar uchun
       
@@ -905,16 +1119,6 @@ export default function App() {
         const wholesaleSalary = (currentBranch.wholesaleSales || 0) * percentage / 100 / 2;
         
         baseSalary = retailSalary + wholesaleSalary;
-        
-        // DEBUG
-        console.log(`🏢 ${currentBranch.name} - ${employee.name} (${employee.position}):`, {
-          retailSales: currentBranch.retailSales,
-          wholesaleSales: currentBranch.wholesaleSales,
-          percentage,
-          retailSalary,
-          wholesaleSalary,
-          baseSalary
-        });
       } else {
         // Oddiy filiallar uchun: FAQAT SHU FILIALDAGI SOTUVCHILARNING SAVDOSIDAN HISOBLASH
         // Filialdagi barcha sotuvchilarning jami savdosini hisoblaymiz
@@ -925,19 +1129,6 @@ export default function App() {
         
         // Jami optom savdo (barcha sotuvchilardan)
         const totalWholesaleSales = filialSotuvchilar.reduce((sum, emp) => sum + (emp.wholesaleSales || 0), 0);
-        
-        // DEBUG: Sotuvchilar ma'lumotlarini ko'rsatish
-        console.log(`🏢 ${currentBranch.name} - ${employee.name} (${employee.position}):`, {
-          sotuvchilar: filialSotuvchilar.length,
-          totalRetailSales,
-          totalWholesaleSales,
-          percentage: employee.percentage,
-          sotuvchilarDetails: filialSotuvchilar.map(s => ({
-            name: s.name,
-            dailySales: s.dailySales,
-            wholesaleSales: s.wholesaleSales
-          }))
-        });
         
         // Chakana savdo (to'liq foiz) + Optom savdo (yarim foiz)
         const retailSalary = (totalRetailSales * percentage) / 100;
@@ -960,17 +1151,20 @@ export default function App() {
       // Har bir bajarilmagan vazifa uchun 10% kamayadi
       const taskPercentage = 100 - (incompleteTasks * 10);
       
-      console.log(`💰 ${currentBranch.name} - ${employee.name}: baseSalary=${baseSalary.toFixed(2)}, completedTasks=${completedTasks}/${totalTasks}, taskPercentage=${taskPercentage}%, finalSalary=${((baseSalary * taskPercentage) / 100).toFixed(2)}`);
-      
       // Vazifalar foizini qo'llash
       calculatedSalary = (baseSalary * taskPercentage) / 100;
     } else {
       calculatedSalary = baseSalary;
-      console.log(`💰 ${currentBranch.name} - ${employee.name}: baseSalary=${baseSalary.toFixed(2)}, NO TASKS, finalSalary=${baseSalary.toFixed(2)}`);
     }
     
     // Standart oylik (bonus) qo'shish
-    return calculatedSalary + (employee.fixedBonus || 0) + (employee.personalBonus || 0) + (employee.salesShareBonus || 0) + (employee.planBonus || 0);
+    // MUHIM: Sotuvchilar uchun fixedBonus qo'shilmaydi, faqat boshqa bonuslar
+    if (employee.position === "sotuvchi") {
+      return calculatedSalary + (employee.personalBonus || 0) + (employee.salesShareBonus || 0) + (employee.planBonus || 0);
+    } else {
+      // Sotuvchi bo'lmagan xodimlar uchun barcha bonuslar
+      return calculatedSalary + (employee.fixedBonus || 0) + (employee.personalBonus || 0) + (employee.salesShareBonus || 0) + (employee.planBonus || 0);
+    }
   };
 
   // Jarima summasini hisoblash (real-time) - BARCHA XODIMLAR UCHUN
@@ -1019,8 +1213,6 @@ export default function App() {
     
     const actualSalary = calculateSalary(employee) - (employee.fixedBonus || 0) - (employee.personalBonus || 0) - (employee.salesShareBonus || 0) - (employee.planBonus || 0); // Bonuslarni ayiramiz
     const penalty = baseSalary - actualSalary;
-    
-    console.log(`⚠️ ${currentBranch.name} - ${employee.name} JARIMA: baseSalary=${baseSalary.toFixed(2)}, actualSalary=${actualSalary.toFixed(2)}, penalty=${penalty.toFixed(2)}`);
     
     return penalty;
   };
@@ -1332,30 +1524,51 @@ export default function App() {
         transform transition-transform duration-300 ease-in-out
         ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        {/* Logo */}
-        <div className="p-6 border-b border-gray-800 flex-shrink-0">
-          <div className="flex items-center justify-between gap-3">
+        {/* Header - Logo va Close button */}
+        <div className="p-4 border-b border-gray-800 flex-shrink-0">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#F87819] to-[#ff8c3a] p-0.5 shadow-xl">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F87819] to-[#ff8c3a] p-0.5 shadow-lg">
                 <img 
                   src="/logo.png" 
                   alt="Logo" 
-                  className="w-full h-full rounded-2xl object-cover bg-white"
+                  className="w-full h-full rounded-xl object-cover bg-white"
                 />
               </div>
               <div>
-                <span className="text-ld font-bold text-white block leading-tight">Alibobo</span>
-                <span className="text-lg text-gray-200 leading-tight">Oylik Tizimi</span>
+                <span className="text-sm font-bold text-white block leading-tight">Alibobo</span>
+                <span className="text-xs text-gray-400 leading-tight">Oylik Tizimi</span>
               </div>
             </div>
             <button
               onClick={() => setIsMobileSidebarOpen(false)}
               className="lg:hidden text-gray-400 hover:text-white transition-colors"
             >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
+          </div>
+        </div>
+        
+        {/* Hozirgi sana va vaqt - Minimalist */}
+        <div className="px-4 pt-4 pb-3 border-b border-gray-800 flex-shrink-0">
+          <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700/50">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 text-[#F87819]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="text-xs font-medium text-gray-400">{currentDateTime.weekday}</span>
+              </div>
+              <span className="text-xs font-semibold text-white">{currentDateTime.date}</span>
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-2 border-t border-gray-700/50">
+              <svg className="w-4 h-4 text-[#F87819]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-xl font-mono font-bold text-white tracking-wider">{currentDateTime.time}</span>
+            </div>
           </div>
         </div>
 
@@ -1659,15 +1872,42 @@ export default function App() {
           <div className="w-full mx-auto p-4 md:p-6 lg:p-8 max-w-[1920px]">
           {/* Header */}
           <div className="mb-6 md:mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
+            <div className="flex-1">
               <h1 className={`text-2xl font-semibold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{currentBranch.name}</h1>
               <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Xodimlar va oylik ma'lumotlari</p>
+              
+              {/* Sana tanlagich */}
+              <div className="mt-3 flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-[#F87819]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <input
+                    type="date"
+                    value={selectedDates[currentBranch._id] || new Date().toISOString().split('T')[0]}
+                    onChange={(e) => {
+                      setSelectedDates(prev => ({
+                        ...prev,
+                        [currentBranch._id]: e.target.value
+                      }));
+                    }}
+                    className={`px-3 py-1.5 rounded-lg border-2 text-sm font-medium transition-all ${
+                      isDarkMode 
+                        ? 'bg-gray-800 border-gray-700 text-white' 
+                        : 'bg-white border-gray-200 text-gray-900'
+                    }`}
+                  />
+                </div>
+                <span className={`text-xs sm:text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {formatUzbekDate(selectedDates[currentBranch._id] || new Date().toISOString().split('T')[0])}
+                </span>
+              </div>
             </div>
             {isAuthenticated && userRole === 'admin' && (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
                 <button
                   onClick={() => setShowAddPosition(true)}
-                  className={`px-6 py-2.5 text-white text-sm font-bold rounded-lg transition-all shadow-lg flex items-center gap-2 ${
+                  className={`px-4 sm:px-6 py-2.5 text-white text-sm font-bold rounded-lg transition-all shadow-lg flex items-center justify-center gap-2 ${
                     isDarkMode 
                       ? 'bg-gray-700 hover:bg-gray-600' 
                       : 'bg-gray-900 hover:bg-gray-800'
@@ -1680,7 +1920,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => setShowFixTasksModal(true)}
-                  className="px-6 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2"
+                  className="px-4 sm:px-6 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-all shadow-lg flex items-center justify-center gap-2"
                   title="Vazifalar mavjudligini tekshirish va qo'shish"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1690,6 +1930,16 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => {
+                    // Tanlangan sanani tekshiramiz
+                    const selectedDate = selectedDates[currentBranch._id] || new Date().toISOString().split('T')[0];
+                    const today = new Date().toISOString().split('T')[0];
+                    
+                    // Agar tanlangan sana bugungi kundan oldingi kun bo'lsa, tarixga saqlashga ruxsat bermaymiz
+                    if (selectedDate < today) {
+                      showErrorNotif('O\'tgan kunlar uchun tarixga saqlash mumkin emas! Faqat bugungi kun uchun saqlash mumkin.');
+                      return;
+                    }
+                    
                     // Tekshirish: xodimlar bormi?
                     if (currentBranch.employees.length === 0) {
                       setShowSaveErrorModal(true);
@@ -1714,7 +1964,7 @@ export default function App() {
                     // Tasdiqlash modal oynasini ko'rsatamiz
                     setShowSaveConfirmModal(true);
                   }}
-                  className="px-6 py-2.5 bg-[#F87819] text-white text-sm font-bold rounded-lg hover:bg-[#e06d15] transition-all shadow-lg flex items-center gap-2"
+                  className="px-4 sm:px-6 py-2.5 bg-[#F87819] text-white text-sm font-bold rounded-lg hover:bg-[#e06d15] transition-all shadow-lg flex items-center justify-center gap-2"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
@@ -1725,10 +1975,10 @@ export default function App() {
             )}
             {/* Filial menejerlari uchun tugmalar */}
             {isAuthenticated && (userRole === 'gijduvon_manager' || userRole === 'navoi_manager') && (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
                 <button
                   onClick={() => setShowFixTasksModal(true)}
-                  className="px-6 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2"
+                  className="px-4 sm:px-6 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-all shadow-lg flex items-center justify-center gap-2"
                   title="Vazifalar mavjudligini tekshirish va qo'shish"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1738,6 +1988,16 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => {
+                    // Tanlangan sanani tekshiramiz
+                    const selectedDate = selectedDates[currentBranch._id] || new Date().toISOString().split('T')[0];
+                    const today = new Date().toISOString().split('T')[0];
+                    
+                    // Agar tanlangan sana bugungi kundan oldingi kun bo'lsa, tarixga saqlashga ruxsat bermaymiz
+                    if (selectedDate < today) {
+                      showErrorNotif('O\'tgan kunlar uchun tarixga saqlash mumkin emas! Faqat bugungi kun uchun saqlash mumkin.');
+                      return;
+                    }
+                    
                     // Tekshirish: xodimlar bormi?
                     if (currentBranch.employees.length === 0) {
                       setShowSaveErrorModal(true);
@@ -1762,7 +2022,7 @@ export default function App() {
                     // Tasdiqlash modal oynasini ko'rsatamiz
                     setShowSaveConfirmModal(true);
                   }}
-                  className="px-6 py-2.5 bg-[#F87819] text-white text-sm font-bold rounded-lg hover:bg-[#e06d15] transition-all shadow-lg flex items-center gap-2"
+                  className="px-4 sm:px-6 py-2.5 bg-[#F87819] text-white text-sm font-bold rounded-lg hover:bg-[#e06d15] transition-all shadow-lg flex items-center justify-center gap-2"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
@@ -2226,19 +2486,46 @@ export default function App() {
                 <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Barcha filiallar - Oxirgi 30 kun</p>
               </div>
               
-              {/* Oylik Plan Tarixi tugmasi */}
-              <button
-                onClick={() => {
-                  setActiveView("planHistory");
-                  loadMonthlyPlanHistory();
-                }}
-                className="px-6 py-3 bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-orange-500/30 transition-all flex items-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Oylik Plan Tarixi
-              </button>
+              <div className="flex items-center gap-4">
+                {/* Tarixni tahrirlash toggle */}
+                {isAuthenticated && userRole === 'admin' && (
+                  <div className={`flex items-center gap-3 px-4 py-2 rounded-xl ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                    <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Tarixni tahrirlash
+                    </span>
+                    <button
+                      onClick={() => setIsHistoryLocked(!isHistoryLocked)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        isHistoryLocked ? 'bg-green-500' : 'bg-red-500'
+                      }`}
+                      title={isHistoryLocked ? "Tahrirlash mumkin emas (Yoniq)" : "Tahrirlash mumkin (O'chiq)"}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          isHistoryLocked ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                    <span className={`text-xs font-semibold ${isHistoryLocked ? 'text-green-500' : 'text-red-500'}`}>
+                      {isHistoryLocked ? 'Yoniq' : 'O\'chiq'}
+                    </span>
+                  </div>
+                )}
+                
+                {/* Oylik Plan Tarixi tugmasi */}
+                <button
+                  onClick={() => {
+                    setActiveView("planHistory");
+                    loadMonthlyPlanHistory();
+                  }}
+                  className="px-6 py-3 bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-orange-500/30 transition-all flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Oylik Plan Tarixi
+                </button>
+              </div>
             </div>
 
             {history.length === 0 ? (
@@ -2268,10 +2555,11 @@ export default function App() {
                     >
                       <div 
                         onClick={() => {
-                          console.log('📋 Selected history record:', record);
-                          console.log('👥 Employees in history:', record.employees);
+                          if (isHistoryLocked) {
+                            showErrorNotif("Tarix himoyalangan! Tahrirlash uchun himoyani o'chiring.");
+                            return;
+                          }
                           record.employees.forEach((emp: any) => {
-                            console.log(`  - ${emp.name}: fixedBonus = ${emp.fixedBonus || 0}`);
                           });
                           setSelectedHistoryRecord(record);
                           setShowHistoryModal(true);
@@ -2289,6 +2577,17 @@ export default function App() {
                           <p className="text-sm font-bold text-[#F87819]">
                             {branch?.name || 'Filial'}
                           </p>
+                          {/* Saqlangan vaqt */}
+                          {record.createdAt && (
+                            <div className="flex items-center gap-1 mt-2">
+                              <svg className="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className={`text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Saqlangan: {formatSavedTime(record.createdAt)}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="space-y-3">
@@ -2836,14 +3135,14 @@ export default function App() {
               <h2 className={`text-lg font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>1. Filialni tanlang</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {branches.map((branch, index) => (
-                  <button
+                  <div
                     key={branch._id}
                     onClick={() => {
                       setActiveBranch(index);
-                      setSelectedEmployee(null); // Xodim tanlovi tozalanadi
+                      setSelectedEmployee(null);
                       loadMonthlyReports(branch._id, selectedMonth);
                     }}
-                    className={`p-6 rounded-xl border-2 transition-all text-left ${
+                    className={`p-6 rounded-xl border-2 transition-all text-left cursor-pointer relative ${
                       currentBranch._id === branch._id
                         ? 'border-[#F87819] bg-gradient-to-br from-orange-50 to-yellow-50 shadow-lg'
                         : isDarkMode
@@ -2867,15 +3166,33 @@ export default function App() {
                         <h3 className={`text-lg font-bold ${currentBranch._id === branch._id ? 'text-gray-900' : isDarkMode ? 'text-white' : 'text-gray-900'}`}>{branch.name}</h3>
                         <p className={`text-sm ${currentBranch._id === branch._id ? 'text-gray-600' : isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{branch.employees.length} xodim</p>
                       </div>
-                      {currentBranch._id === branch._id && (
-                        <div className="w-6 h-6 bg-[#F87819] rounded-full flex items-center justify-center">
-                          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {/* O'chirish tugmasi */}
+                        {currentBranch._id === branch._id && isAuthenticated && userRole === 'admin' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setReportToDelete({ branchId: branch._id, branchName: branch.name, month: selectedMonth });
+                              setShowDeleteReportConfirm(true);
+                            }}
+                            className="w-10 h-10 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-colors flex items-center justify-center"
+                            title="Hisobotlarni o'chirish"
+                          >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
+                        {currentBranch._id === branch._id && (
+                          <div className="w-6 h-6 bg-[#F87819] rounded-full flex items-center justify-center">
+                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -3216,13 +3533,13 @@ export default function App() {
                         });
                         const result = await response.json();
                         if (result.ok) {
-                          alert('✅ Oylik plan tarixga saqlandi!');
+                          showSuccessNotif('Oylik plan tarixga saqlandi!');
                           await loadBranches();
                         } else {
-                          alert('❌ Xato: ' + result.error);
+                          showErrorNotif('Xato: ' + result.error);
                         }
                       } catch (error) {
-                        alert('❌ Xato yuz berdi: ' + (error as Error).message);
+                        showErrorNotif('Xato yuz berdi: ' + (error as Error).message);
                       }
                     }
                   }}
@@ -4294,6 +4611,9 @@ export default function App() {
                       <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Kunlik Savdo</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Foiz</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Oylik</th>
+                      {!isHistoryLocked && isAuthenticated && userRole === 'admin' && (
+                        <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Amallar</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
@@ -4312,6 +4632,29 @@ export default function App() {
                         <td className="px-4 py-3 text-sm font-semibold text-green-600">
                           {formatMoney(emp.salary || 0)}
                         </td>
+                        {!isHistoryLocked && isAuthenticated && userRole === 'admin' && (
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => {
+                                setEditingHistoryEmployee(emp);
+                                // Sotuvchi uchun to'liq ma'lumotlarni yuklash
+                                if (emp.position === 'sotuvchi') {
+                                  setEditHistoryRetailSales((emp.dailySales || 0).toString());
+                                  setEditHistoryWholesaleSales((emp.wholesaleSales || 0).toString());
+                                  setEditHistoryPercentage((emp.percentage || 0).toString());
+                                  setEditHistoryFixedBonus((emp.fixedBonus || 0).toString());
+                                  setEditHistoryPersonalBonus((emp.personalBonus || 0).toString());
+                                } else {
+                                  setEditHistorySalary(emp.salary?.toString() || "0");
+                                }
+                                setShowEditHistoryModal(true);
+                              }}
+                              className="px-3 py-1.5 bg-blue-500 text-white text-xs font-bold rounded-lg hover:bg-blue-600 transition-colors"
+                            >
+                              Tahrirlash
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -4361,6 +4704,28 @@ export default function App() {
                           {formatMoney(emp.salary || 0)}
                         </span>
                       </div>
+                      
+                      {!isHistoryLocked && isAuthenticated && userRole === 'admin' && (
+                        <button
+                          onClick={() => {
+                            setEditingHistoryEmployee(emp);
+                            // Sotuvchi uchun to'liq ma'lumotlarni yuklash
+                            if (emp.position === 'sotuvchi') {
+                              setEditHistoryRetailSales((emp.dailySales || 0).toString());
+                              setEditHistoryWholesaleSales((emp.wholesaleSales || 0).toString());
+                              setEditHistoryPercentage((emp.percentage || 0).toString());
+                              setEditHistoryFixedBonus((emp.fixedBonus || 0).toString());
+                              setEditHistoryPersonalBonus((emp.personalBonus || 0).toString());
+                            } else {
+                              setEditHistorySalary(emp.salary?.toString() || "0");
+                            }
+                            setShowEditHistoryModal(true);
+                          }}
+                          className="w-full mt-3 px-3 py-2 bg-blue-500 text-white text-sm font-bold rounded-lg hover:bg-blue-600 transition-colors"
+                        >
+                          Tahrirlash
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -4586,23 +4951,23 @@ export default function App() {
                   setIsSaving(true);
                   
                   try {
-                    const result = await api.saveDailyHistory(currentBranch._id);
+                    // Tanlangan sanani olamiz
+                    const selectedDate = selectedDates[currentBranch._id] || new Date().toISOString().split('T')[0];
+                    
+                    const result = await api.saveDailyHistory(currentBranch._id, selectedDate);
                     if (result.ok) {
                       setShowSaveConfirmModal(false);
                       setSavedDate(result.date);
                       setShowSaveSuccessModal(true);
                       
                       // Ma'lumotlarni to'liq qayta yuklaymiz (cache'siz)
-                      console.log('🔄 Reloading branches after saving to history...');
                       await loadBranches(true); // Loading indicator bilan
                       await loadHistory();
-                      console.log('✅ Branches reloaded successfully');
                     } else {
-                      alert('❌ Saqlashda xato yuz berdi');
+                      showErrorNotif('Saqlashda xato yuz berdi');
                     }
                   } catch (error) {
-                    alert('❌ Saqlashda xato yuz berdi');
-                    console.error(error);
+                    showErrorNotif('Saqlashda xato yuz berdi');
                   } finally {
                     setIsSaving(false);
                   }
@@ -4749,8 +5114,118 @@ export default function App() {
                       await loadHistory();
                     }
                   } catch (error) {
-                    alert('❌ O\'chirishda xato yuz berdi');
-                    console.error(error);
+                    showErrorNotif('O\'chirishda xato yuz berdi');
+                  }
+                }}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all"
+              >
+                O'chirish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Hisobotlarni o'chirish tasdiqlash */}
+      {showDeleteReportConfirm && reportToDelete && (
+        <div 
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setShowDeleteReportConfirm(false);
+            setReportToDelete(null);
+            setDeleteReportCode("");
+          }}
+        >
+          <div 
+            className={`rounded-2xl shadow-2xl max-w-md w-full overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-5 bg-gradient-to-b from-gray-900 to-gray-800">
+              <h3 className="text-xl font-bold text-white">Hisobotlarni o'chirish</h3>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-red-100 to-red-200 rounded-full flex items-center justify-center shadow-lg">
+                  <svg className="w-7 h-7 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className={`text-base font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Rostdan ham o'chirmoqchimisiz?</p>
+                  <p className={`text-sm mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {reportToDelete.month} - {reportToDelete.branchName}
+                  </p>
+                  <p className="text-xs text-red-600 font-semibold mt-2">Bu amalni qaytarib bo'lmaydi.</p>
+                </div>
+              </div>
+
+              {/* Kod kiritish */}
+              <div className="mt-4">
+                <label className={`block text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  Tasdiqlash kodi
+                </label>
+                <input
+                  type="password"
+                  value={deleteReportCode}
+                  onChange={(e) => setDeleteReportCode(e.target.value)}
+                  placeholder="Kodni kiriting"
+                  autoComplete="off"
+                  className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 font-medium ${
+                    isDarkMode 
+                      ? 'border-gray-700 bg-gray-700 text-white placeholder-gray-500' 
+                      : 'border-gray-300 bg-white text-gray-900 placeholder-gray-400'
+                  }`}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className={`px-6 py-4 border-t flex gap-3 ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+              <button
+                onClick={() => {
+                  setShowDeleteReportConfirm(false);
+                  setReportToDelete(null);
+                  setDeleteReportCode("");
+                }}
+                className={`flex-1 px-4 py-3 border-2 text-sm font-bold rounded-xl transition-all ${
+                  isDarkMode 
+                    ? 'border-gray-600 text-gray-300 hover:bg-gray-600' 
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                Bekor qilish
+              </button>
+              <button
+                onClick={async () => {
+                  // Kodni tekshirish
+                  if (deleteReportCode !== "3335") {
+                    showErrorNotif("Xato! Kod noto'g'ri.");
+                    return;
+                  }
+
+                  try {
+                    // Tanlangan filial va oyning barcha hisobotlarini o'chirish
+                    const reportsToDelete = monthlyReports.filter(
+                      report => report.branchId === reportToDelete.branchId
+                    );
+
+                    // Har bir hisobotni o'chirish
+                    for (const report of reportsToDelete) {
+                      await api.deleteHistory(report._id);
+                    }
+
+                    setShowDeleteReportConfirm(false);
+                    setReportToDelete(null);
+                    setDeleteReportCode("");
+                    
+                    // Success notification
+                    showSuccessNotif("Hisobot muvaffaqiyatli o'chirildi!");
+                    
+                    // Hisobotlarni qayta yuklash
+                    await loadMonthlyReports(reportToDelete.branchId, reportToDelete.month);
+                  } catch (error) {
+                    showErrorNotif("Xato! Hisobotni o'chirishda xatolik yuz berdi.");
                   }
                 }}
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all"
@@ -4818,7 +5293,6 @@ export default function App() {
                     setShowAddTaskModal(false);
                     setNewTaskName("");
                   } catch (error) {
-                    console.error('Vazifa qo\'shishda xato:', error);
                   }
                 }}
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all"
@@ -4872,7 +5346,6 @@ export default function App() {
                     setEditingTask(null);
                     setNewTaskName("");
                   } catch (error) {
-                    console.error('Vazifani yangilashda xato:', error);
                   }
                 }}
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-[#F87819] to-[#ff8c3a] text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all"
@@ -4925,7 +5398,6 @@ export default function App() {
                     setShowDeleteTaskConfirm(false);
                     setTaskToDelete(null);
                   } catch (error) {
-                    console.error('Vazifani o\'chirishda xato:', error);
                   }
                 }}
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all"
@@ -5036,8 +5508,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Success Notification */}
-      {showSuccessNotification && (
+      {/* Login Success Notification */}
+      {showLoginSuccessNotification && (
         <div className="fixed top-4 right-4 z-[60] animate-slide-in-right">
           <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl shadow-2xl p-4 flex items-center gap-4 min-w-[320px] max-w-md">
             <div className="flex-shrink-0 w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
@@ -5050,7 +5522,7 @@ export default function App() {
               <p className="text-sm text-green-50 mt-0.5">Endi siz barcha funksiyalarni bemalol bajara olasiz</p>
             </div>
             <button
-              onClick={() => setShowSuccessNotification(false)}
+              onClick={() => setShowLoginSuccessNotification(false)}
               className="flex-shrink-0 text-white/80 hover:text-white transition-colors"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -5203,8 +5675,7 @@ export default function App() {
                       setShowNoIssuesModal(true);
                     }
                   } catch (error) {
-                    console.error('Xato:', error);
-                    alert('❌ Xato yuz berdi! Console ni tekshiring.');
+                    showErrorNotif('Xato yuz berdi! Console ni tekshiring.');
                   }
                 }}
                 className="flex-1 px-6 py-3.5 bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-base font-bold rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02]"
@@ -5293,6 +5764,428 @@ export default function App() {
                 OK
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Tarix xodimini tahrirlash */}
+      {showEditHistoryModal && editingHistoryEmployee && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={`rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+            <div className="px-6 py-5 bg-gradient-to-b from-gray-900 to-gray-800">
+              <h3 className="text-xl font-bold text-white">
+                {editingHistoryEmployee.position === 'sotuvchi' ? 'Sotuvchi Ma\'lumotlarini Tahrirlash' : 'Oylikni Tahrirlash'}
+              </h3>
+              <p className="text-sm text-gray-300 mt-1">{editingHistoryEmployee.name}</p>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              {editingHistoryEmployee.position === 'sotuvchi' ? (
+                // Sotuvchi uchun to'liq ma'lumotlar
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        Chakana Savdo (so'm)
+                      </label>
+                      <input
+                        type="text"
+                        value={editHistoryRetailSales}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9]/g, '');
+                          setEditHistoryRetailSales(value);
+                        }}
+                        placeholder="0"
+                        className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium ${
+                          isDarkMode 
+                            ? 'border-gray-700 bg-gray-700 text-white placeholder-gray-500' 
+                            : 'border-gray-300 bg-white text-gray-900 placeholder-gray-400'
+                        }`}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        Optom Savdo (so'm)
+                      </label>
+                      <input
+                        type="text"
+                        value={editHistoryWholesaleSales}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9]/g, '');
+                          setEditHistoryWholesaleSales(value);
+                        }}
+                        placeholder="0"
+                        className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium ${
+                          isDarkMode 
+                            ? 'border-gray-700 bg-gray-700 text-white placeholder-gray-500' 
+                            : 'border-gray-300 bg-white text-gray-900 placeholder-gray-400'
+                        }`}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        Foiz (%)
+                      </label>
+                      <input
+                        type="text"
+                        value={editHistoryPercentage}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9.]/g, '');
+                          setEditHistoryPercentage(value);
+                        }}
+                        placeholder="0"
+                        className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium ${
+                          isDarkMode 
+                            ? 'border-gray-700 bg-gray-700 text-white placeholder-gray-500' 
+                            : 'border-gray-300 bg-white text-gray-900 placeholder-gray-400'
+                        }`}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        Standart Bonus (so'm)
+                      </label>
+                      <input
+                        type="text"
+                        value={editHistoryFixedBonus}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9]/g, '');
+                          setEditHistoryFixedBonus(value);
+                        }}
+                        placeholder="0"
+                        className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium ${
+                          isDarkMode 
+                            ? 'border-gray-700 bg-gray-700 text-white placeholder-gray-500' 
+                            : 'border-gray-300 bg-white text-gray-900 placeholder-gray-400'
+                        }`}
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className={`block text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        Shaxsiy Bonus (so'm)
+                      </label>
+                      <input
+                        type="text"
+                        value={editHistoryPersonalBonus}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9]/g, '');
+                          setEditHistoryPersonalBonus(value);
+                        }}
+                        placeholder="0"
+                        className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium ${
+                          isDarkMode 
+                            ? 'border-gray-700 bg-gray-700 text-white placeholder-gray-500' 
+                            : 'border-gray-300 bg-white text-gray-900 placeholder-gray-400'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-gray-700' : 'bg-blue-50'}`}>
+                    <p className={`text-xs mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Hozirgi qiymatlar:</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Chakana: </span>
+                        <span className={`font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                          {formatMoney(editingHistoryEmployee.dailySales || 0)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Optom: </span>
+                        <span className={`font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                          {formatMoney(editingHistoryEmployee.wholesaleSales || 0)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Foiz: </span>
+                        <span className={`font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                          {editingHistoryEmployee.percentage}%
+                        </span>
+                      </div>
+                      <div>
+                        <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Standart Bonus: </span>
+                        <span className={`font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                          {formatMoney(editingHistoryEmployee.fixedBonus || 0)}
+                        </span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Shaxsiy Bonus: </span>
+                        <span className={`font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                          {formatMoney(editingHistoryEmployee.personalBonus || 0)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                // Boshqa xodimlar uchun faqat oylik
+                <div>
+                  <label className={`block text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                    Oylik (so'm)
+                  </label>
+                  <input
+                    type="text"
+                    value={editHistorySalary}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      setEditHistorySalary(value);
+                    }}
+                    placeholder="0"
+                    className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium ${
+                      isDarkMode 
+                        ? 'border-gray-700 bg-gray-700 text-white placeholder-gray-500' 
+                        : 'border-gray-300 bg-white text-gray-900 placeholder-gray-400'
+                    }`}
+                  />
+                  <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Hozirgi: {formatMoney(editingHistoryEmployee.salary || 0)}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className={`px-6 py-4 border-t flex gap-3 ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+              <button
+                onClick={() => {
+                  setShowEditHistoryModal(false);
+                  setEditingHistoryEmployee(null);
+                  setEditHistorySalary("");
+                  setEditHistoryRetailSales("");
+                  setEditHistoryWholesaleSales("");
+                  setEditHistoryPercentage("");
+                  setEditHistoryFixedBonus("");
+                  setEditHistoryPersonalBonus("");
+                }}
+                className={`flex-1 px-4 py-3 border-2 text-sm font-bold rounded-xl transition-all ${
+                  isDarkMode 
+                    ? 'border-gray-600 text-gray-300 hover:bg-gray-600' 
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                Bekor qilish
+              </button>
+              <button
+                onClick={async () => {
+                  let updatedEmployees;
+                  
+                  if (editingHistoryEmployee.position === 'sotuvchi') {
+                    // Sotuvchi uchun to'liq ma'lumotlarni yangilash
+                    const newRetailSales = parseFloat(editHistoryRetailSales) || 0;
+                    const newWholesaleSales = parseFloat(editHistoryWholesaleSales) || 0;
+                    const newPercentage = parseFloat(editHistoryPercentage) || 0;
+                    const newFixedBonus = parseFloat(editHistoryFixedBonus) || 0;
+                    const newPersonalBonus = parseFloat(editHistoryPersonalBonus) || 0;
+                    
+                    // Yangi oylikni hisoblash
+                    const retailSalary = (newRetailSales * newPercentage) / 100;
+                    const wholesaleSalary = (newWholesaleSales * newPercentage) / 100 / 2;
+                    const newSalary = retailSalary + wholesaleSalary + newFixedBonus + newPersonalBonus;
+                    
+                    updatedEmployees = selectedHistoryRecord.employees.map((emp: any) => 
+                      emp.employeeId === editingHistoryEmployee.employeeId 
+                        ? { 
+                            ...emp, 
+                            dailySales: newRetailSales,
+                            wholesaleSales: newWholesaleSales,
+                            percentage: newPercentage,
+                            fixedBonus: newFixedBonus,
+                            personalBonus: newPersonalBonus,
+                            salary: newSalary
+                          }
+                        : emp
+                    );
+                  } else {
+                    // Boshqa xodimlar uchun faqat oylikni yangilash
+                    const newSalary = parseFloat(editHistorySalary) || 0;
+                    
+                    updatedEmployees = selectedHistoryRecord.employees.map((emp: any) => 
+                      emp.employeeId === editingHistoryEmployee.employeeId 
+                        ? { ...emp, salary: newSalary }
+                        : emp
+                    );
+                  }
+
+                  // Lokal state'ni yangilash
+                  setSelectedHistoryRecord({
+                    ...selectedHistoryRecord,
+                    employees: updatedEmployees
+                  });
+
+                  // History listni ham yangilash
+                  setHistory(prevHistory => 
+                    prevHistory.map(record => 
+                      record._id === selectedHistoryRecord._id
+                        ? { ...record, employees: updatedEmployees }
+                        : record
+                    )
+                  );
+
+                  setShowEditHistoryModal(false);
+                  setEditingHistoryEmployee(null);
+                  setEditHistorySalary("");
+                  setEditHistoryRetailSales("");
+                  setEditHistoryWholesaleSales("");
+                  setEditHistoryPercentage("");
+                  setEditHistoryFixedBonus("");
+                  setEditHistoryPersonalBonus("");
+                  
+                  showSuccessNotif("Ma'lumotlar muvaffaqiyatli yangilandi!");
+                }}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all"
+              >
+                Saqlash
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+
+      {/* Modal - Xato - YASHIRILGAN (notification ishlatiladi) */}
+      {false && showErrorModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={`rounded-2xl shadow-2xl max-w-md w-full overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+            <div className="px-6 py-5 bg-gradient-to-b from-red-600 to-red-700">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-white">Xato!</h3>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <p className={`text-base ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                {errorMessage}
+              </p>
+            </div>
+
+            <div className={`px-6 py-4 border-t ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+              <button
+                onClick={() => {
+                  setShowErrorModal(false);
+                  setErrorMessage("");
+                }}
+                className="w-full px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all"
+              >
+                Yopish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Muvaffaqiyat - YASHIRILGAN (notification ishlatiladi) */}
+      {false && showSuccessModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={`rounded-2xl shadow-2xl max-w-md w-full overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+            <div className="px-6 py-5 bg-gradient-to-b from-green-600 to-green-700">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-white">Muvaffaqiyatli!</h3>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <p className={`text-base ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                {successMessage}
+              </p>
+            </div>
+
+            <div className={`px-6 py-4 border-t ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setSuccessMessage("");
+                }}
+                className="w-full px-4 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all"
+              >
+                Yopish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notification - Success (o'ng tepada) */}
+      {showSuccessNotification && (
+        <div className="fixed top-4 right-4 z-[60] animate-slide-in-right">
+          <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl shadow-2xl p-4 flex items-center gap-4 min-w-[320px] max-w-md">
+            <div className="flex-shrink-0 w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-sm">{successNotificationMessage}</p>
+            </div>
+            <button
+              onClick={() => setShowSuccessNotification(false)}
+              className="flex-shrink-0 text-white/80 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Notification - Error (o'ng tepada) */}
+      {showErrorNotification && (
+        <div className="fixed top-4 right-4 z-[60] animate-slide-in-right">
+          <div className="bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl shadow-2xl p-4 flex items-center gap-4 min-w-[320px] max-w-md">
+            <div className="flex-shrink-0 w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-sm">{errorNotificationMessage}</p>
+            </div>
+            <button
+              onClick={() => setShowErrorNotification(false)}
+              className="flex-shrink-0 text-white/80 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Notification - Info (o'ng tepada) */}
+      {showInfoNotification && (
+        <div className="fixed top-4 right-4 z-[60] animate-slide-in-right">
+          <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl shadow-2xl p-4 flex items-center gap-4 min-w-[320px] max-w-md">
+            <div className="flex-shrink-0 w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-sm">{infoNotificationMessage}</p>
+            </div>
+            <button
+              onClick={() => setShowInfoNotification(false)}
+              className="flex-shrink-0 text-white/80 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
       )}

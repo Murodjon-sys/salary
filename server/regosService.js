@@ -26,7 +26,6 @@ export const regosService = {
       );
       return response.data;
     } catch (error) {
-      console.error('Regos API xatosi:', error.message);
       throw error;
     }
   },
@@ -50,7 +49,6 @@ export const regosService = {
       );
       return response.data;
     } catch (error) {
-      console.error('Regos API xatosi:', error.message);
       throw error;
     }
   },
@@ -70,7 +68,6 @@ export const regosService = {
       );
       return response.data;
     } catch (error) {
-      console.error('Regos API xatosi:', error.message);
       throw error;
     }
   }

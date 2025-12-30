@@ -1828,11 +1828,11 @@ export default function App() {
                   <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
                     {currentBranch.employees
                       .sort((a, b) => {
-                        // Lavozimlar tartibi: Manager → Shofir → Kassir → Ishchi → Sotuvchi → Ta'minotchi
+                        // Lavozimlar tartibi: Manager → Kassir → Shofir → Ishchi → Sotuvchi → Ta'minotchi
                         const positionOrder: Record<string, number> = {
                           'manager': 1,
-                          'shofir': 2,
-                          'kassir': 3,
+                          'kassir': 2,
+                          'shofir': 3,
                           'ishchi': 4,
                           'sotuvchi': 5,
                           'taminotchi': 6
@@ -1982,11 +1982,11 @@ export default function App() {
               <div className="lg:hidden p-4 space-y-4">
                 {currentBranch.employees
                   .sort((a, b) => {
-                    // Lavozimlar tartibi
+                    // Lavozimlar tartibi: Manager → Kassir → Shofir → Ishchi → Sotuvchi → Ta'minotchi
                     const positionOrder: Record<string, number> = {
                       'manager': 1,
-                      'shofir': 2,
-                      'kassir': 3,
+                      'kassir': 2,
+                      'shofir': 3,
                       'ishchi': 4,
                       'sotuvchi': 5,
                       'taminotchi': 6

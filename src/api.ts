@@ -16,6 +16,7 @@ export type Employee = {
   monthlyPlan?: number; // Oylik plan (faqat sotuvchilar uchun, default: 500,000,000)
   monthlyRetailSales?: number; // Oylik chakana savdo (plan uchun)
   planBonus?: number; // Plan bajarilsa bonus (1,000,000)
+  isPresent?: boolean; // Bugun ishga keldi/ketdi (faqat sotuvchilar uchun, default: false)
 };
 
 export type Branch = {

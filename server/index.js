@@ -44,7 +44,8 @@ const employeeSchema = new mongoose.Schema({
   salesShareBonus: { type: Number, default: 0 }, // Jami savdodan ulush bonusi (0.5% / sotuvchilar soni)
   monthlyPlan: { type: Number, default: 500000000 }, // Oylik plan (faqat sotuvchilar uchun)
   monthlyRetailSales: { type: Number, default: 0 }, // Oylik chakana savdo (plan uchun)
-  planBonus: { type: Number, default: 0 } // Plan bajarilsa bonus (1,000,000)
+  planBonus: { type: Number, default: 0 }, // Plan bajarilsa bonus (1,000,000)
+  isPresent: { type: Boolean, default: false } // Bugun ishga keldi/ketdi (faqat sotuvchilar uchun)
 });
 
 const branchSchema = new mongoose.Schema({
@@ -80,7 +81,8 @@ const dailySalesHistorySchema = new mongoose.Schema({
     teamVolumeBonus: { type: Number, default: 0 }, // Jamoaviy abyom bonusi
     salesShareBonus: { type: Number, default: 0 }, // Jami savdodan ulush bonusi
     planBonus: { type: Number, default: 0 }, // Plan bajarilsa bonus
-    monthlyRetailSales: { type: Number, default: 0 } // Oylik chakana savdo
+    monthlyRetailSales: { type: Number, default: 0 }, // Oylik chakana savdo
+    isPresent: { type: Boolean, default: false } // Keldi/ketdi holati
   }]
 }, { timestamps: true });
 
@@ -329,7 +331,8 @@ app.get('/api/branches', async (req, res) => {
             salesShareBonus: emp.salesShareBonus || 0,
             monthlyPlan: emp.monthlyPlan || 500000000,
             monthlyRetailSales: emp.monthlyRetailSales || 0,
-            planBonus: emp.planBonus || 0
+            planBonus: emp.planBonus || 0,
+            isPresent: emp.isPresent || false
           };
         }));
         
@@ -476,6 +479,11 @@ app.put('/api/employees/:id', async (req, res) => {
       updateData.planBonus = req.body.planBonus;
     }
     
+    // Agar isPresent berilgan bo'lsa, uni ham yangilaymiz
+    if (req.body.isPresent !== undefined) {
+      updateData.isPresent = req.body.isPresent;
+    }
+    
     // Agar lastSalesDate berilgan bo'lsa (frontend'dan), uni ishlatamiz
     // Aks holda, agar dailySales yoki wholesaleSales yangilansa, bugungi sanani saqlaymiz
     if (req.body.lastSalesDate !== undefined) {
@@ -504,7 +512,8 @@ app.put('/api/employees/:id', async (req, res) => {
       salesShareBonus: employee.salesShareBonus || 0,
       monthlyPlan: employee.monthlyPlan || 500000000,
       monthlyRetailSales: employee.monthlyRetailSales || 0,
-      planBonus: employee.planBonus || 0
+      planBonus: employee.planBonus || 0,
+      isPresent: employee.isPresent || false
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -890,6 +899,7 @@ app.post('/api/history/save-daily', async (req, res) => {
         personalBonus: emp.personalBonus || 0, // Shaxsiy bonus qo'shamiz
         teamVolumeBonus: emp.teamVolumeBonus || 0, // Jamoaviy abyom bonusi qo'shamiz
         salesShareBonus: emp.salesShareBonus || 0, // Jami savdodan ulush bonusi qo'shamiz
+        isPresent: emp.isPresent || false, // Keldi/ketdi holatini saqlaymiz
         planBonus: emp.planBonus || 0, // Plan bonusi qo'shamiz
         monthlyRetailSales: emp.monthlyRetailSales || 0 // Oylik chakana savdo
       };
@@ -967,7 +977,8 @@ app.post('/api/history/save-daily', async (req, res) => {
         salesShareBonus: 0,
         monthlyRetailSales: 0, // Oylik savdoni 0 ga qaytaramiz
         planBonus: planBonusToSave, // Plan bonusini saqlaymiz (keyingi oy uchun)
-        dailyTasks: resetTasks // Vazifalarni false ga qaytaramiz
+        dailyTasks: resetTasks, // Vazifalarni false ga qaytaramiz
+        isPresent: false // Keldi/ketdi ni false ga qaytaramiz (har kuni yangi)
       }, { new: true }); // Yangilangan dokumentni qaytarish
       
           }

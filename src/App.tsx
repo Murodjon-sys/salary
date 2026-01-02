@@ -710,11 +710,11 @@ export default function App() {
       const salesSharePercentage = 0.5; // 0.5%
       const totalShareBonus = (retailSalesOnly * salesSharePercentage) / 100;
       
-      // Sotuvchilar sonini hisoblash
-      const sellersCount = currentBranch.employees.filter(emp => emp.position === 'sotuvchi').length;
+      // MUHIM: Faqat kelgan (isPresent=true) sotuvchilar sonini hisoblash
+      const presentSellersCount = currentBranch.employees.filter(emp => emp.position === 'sotuvchi' && emp.isPresent).length;
       
-      if (sellersCount > 0) {
-        const sharePerSeller = totalShareBonus / sellersCount;
+      if (presentSellersCount > 0) {
+        const sharePerSeller = totalShareBonus / presentSellersCount;
         setSalesShareBonusInput(formatNumber(Math.round(sharePerSeller)));
       } else {
         setSalesShareBonusInput("");
@@ -1090,19 +1090,44 @@ export default function App() {
   };
 
   const calculateSalary = (employee: Employee) => {
+    // Agar currentBranch mavjud bo'lmasa, 0 qaytaramiz
+    if (!currentBranch) {
+      return 0;
+    }
+    
     let percentage = employee.percentage;
     let calculatedSalary = 0;
     let baseSalary = 0; // Asosiy oylik (vazifalar foizisiz)
     
     // Agar sotuvchi bo'lsa
     if (employee.position === "sotuvchi") {
+      // YANGI LOGIKA: Umumiy savdoni faqat kelgan sotuvchilarga bo'lib berish
+      
+      // Agar sotuvchi kelmagan bo'lsa, oylik 0
+      if (!employee.isPresent) {
+        return 0;
+      }
+      
+      // Kelgan sotuvchilar sonini hisoblash
+      const presentSellers = currentBranch.employees.filter(emp => emp.position === 'sotuvchi' && emp.isPresent);
+      const presentSellersCount = presentSellers.length;
+      
+      if (presentSellersCount === 0) {
+        return 0;
+      }
+      
+      // Umumiy savdoni kelgan sotuvchilar soniga bo'lamiz
+      const totalSales = currentBranch.totalSales || 0;
+      
       // Chakana savdo (to'liq foiz)
-      const retailSales = employee.dailySales || 0;
-      const retailSalary = (retailSales * percentage) / 100;
+      const retailSales = currentBranch.retailSales || 0;
+      const retailPerSeller = retailSales / presentSellersCount;
+      const retailSalary = (retailPerSeller * percentage) / 100;
       
       // Optom savdo (yarim foiz)
-      const wholesaleSales = employee.wholesaleSales || 0;
-      const wholesaleSalary = (wholesaleSales * percentage) / 100 / 2;
+      const wholesaleSales = currentBranch.wholesaleSales || 0;
+      const wholesalePerSeller = wholesaleSales / presentSellersCount;
+      const wholesaleSalary = (wholesalePerSeller * percentage) / 100 / 2;
       
       // Jami asosiy oylik
       baseSalary = retailSalary + wholesaleSalary;
@@ -1121,13 +1146,13 @@ export default function App() {
         baseSalary = retailSalary + wholesaleSalary;
       } else {
         // Oddiy filiallar uchun: FAQAT SHU FILIALDAGI SOTUVCHILARNING SAVDOSIDAN HISOBLASH
-        // Filialdagi barcha sotuvchilarning jami savdosini hisoblaymiz
-        const filialSotuvchilar = currentBranch.employees.filter(emp => emp.position === 'sotuvchi');
+        // MUHIM: Faqat kelgan (isPresent=true) sotuvchilarni hisobga olamiz
+        const filialSotuvchilar = currentBranch.employees.filter(emp => emp.position === 'sotuvchi' && emp.isPresent);
         
-        // Jami chakana savdo (barcha sotuvchilardan)
+        // Jami chakana savdo (faqat kelgan sotuvchilardan)
         const totalRetailSales = filialSotuvchilar.reduce((sum, emp) => sum + (emp.dailySales || 0), 0);
         
-        // Jami optom savdo (barcha sotuvchilardan)
+        // Jami optom savdo (faqat kelgan sotuvchilardan)
         const totalWholesaleSales = filialSotuvchilar.reduce((sum, emp) => sum + (emp.wholesaleSales || 0), 0);
         
         // Chakana savdo (to'liq foiz) + Optom savdo (yarim foiz)
@@ -1177,18 +1202,30 @@ export default function App() {
     let baseSalary = 0;
     
     if (employee.position === 'sotuvchi') {
-      // Sotuvchi uchun: kunlik savdodan hisoblash
-      if (!employee.dailySales && !employee.wholesaleSales) {
+      // Sotuvchi uchun: umumiy savdodan ulush
+      
+      // Agar sotuvchi kelmagan bo'lsa, jarima ham yo'q
+      if (!employee.isPresent) {
+        return 0;
+      }
+      
+      // Kelgan sotuvchilar sonini hisoblash
+      const presentSellers = currentBranch.employees.filter(emp => emp.position === 'sotuvchi' && emp.isPresent);
+      const presentSellersCount = presentSellers.length;
+      
+      if (presentSellersCount === 0) {
         return 0;
       }
       
       // Chakana savdo (to'liq foiz)
-      const retailSales = employee.dailySales || 0;
-      const retailSalary = (retailSales * employee.percentage) / 100;
+      const retailSales = currentBranch.retailSales || 0;
+      const retailPerSeller = retailSales / presentSellersCount;
+      const retailSalary = (retailPerSeller * employee.percentage) / 100;
       
       // Optom savdo (yarim foiz)
-      const wholesaleSales = employee.wholesaleSales || 0;
-      const wholesaleSalary = (wholesaleSales * employee.percentage) / 100 / 2;
+      const wholesaleSales = currentBranch.wholesaleSales || 0;
+      const wholesalePerSeller = wholesaleSales / presentSellersCount;
+      const wholesaleSalary = (wholesalePerSeller * employee.percentage) / 100 / 2;
       
       // Jami asosiy oylik
       baseSalary = retailSalary + wholesaleSalary;
@@ -1201,7 +1238,8 @@ export default function App() {
         baseSalary = retailSalary + wholesaleSalary;
       } else {
         // Oddiy filiallar uchun: sotuvchilarning savdosidan
-        const filialSotuvchilar = currentBranch.employees.filter(emp => emp.position === 'sotuvchi');
+        // MUHIM: Faqat kelgan (isPresent=true) sotuvchilarni hisobga olamiz
+        const filialSotuvchilar = currentBranch.employees.filter(emp => emp.position === 'sotuvchi' && emp.isPresent);
         const totalRetailSales = filialSotuvchilar.reduce((sum, emp) => sum + (emp.dailySales || 0), 0);
         const totalWholesaleSales = filialSotuvchilar.reduce((sum, emp) => sum + (emp.wholesaleSales || 0), 0);
         
@@ -2101,6 +2139,7 @@ export default function App() {
                     <tr>
                       <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Ism</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Lavozim</th>
+                      <th className={`px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Keldi/Ketdi</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Foiz (%)</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Chakana Savdo</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Optom Savdo</th>
@@ -2163,6 +2202,49 @@ export default function App() {
                           <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide ${positionColors[employee.position] || 'bg-gray-200 text-gray-800'}`}>
                             {positions.find(p => p.id === employee.position)?.name || employee.position}
                           </span>
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          {employee.position === "sotuvchi" ? (
+                            <div className="flex items-center justify-center">
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={employee.isPresent || false}
+                                  onChange={async (e) => {
+                                    const newIsPresent = e.target.checked;
+                                    // Lokal state'ni darhol yangilaymiz
+                                    setBranches(prevBranches => 
+                                      prevBranches.map(branch => ({
+                                        ...branch,
+                                        employees: branch.employees.map(emp => 
+                                          emp.id === employee.id 
+                                            ? { ...emp, isPresent: newIsPresent }
+                                            : emp
+                                        )
+                                      }))
+                                    );
+                                    
+                                    // Background'da serverga saqlaymiz
+                                    try {
+                                      await api.updateEmployee(employee.id, {
+                                        name: employee.name,
+                                        position: employee.position,
+                                        percentage: employee.percentage,
+                                        isPresent: newIsPresent
+                                      });
+                                    } catch (error) {
+                                      // Xato bo'lsa, qayta yuklaymiz
+                                      await loadBranches(false);
+                                    }
+                                  }}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                              </label>
+                            </div>
+                          ) : (
+                            <span className={`text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
+                          )}
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap">
                           <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>{employee.percentage}%</span>
@@ -2329,6 +2411,48 @@ export default function App() {
 
                     {/* Card Body */}
                     <div className="p-4 space-y-3">
+                      {/* Keldi/Ketdi - faqat sotuvchilar uchun */}
+                      {employee.position === "sotuvchi" && (
+                        <div className="flex items-center justify-between pb-3 border-b border-gray-200">
+                          <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Keldi/Ketdi:</span>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={employee.isPresent || false}
+                              onChange={async (e) => {
+                                const newIsPresent = e.target.checked;
+                                // Lokal state'ni darhol yangilaymiz
+                                setBranches(prevBranches => 
+                                  prevBranches.map(branch => ({
+                                    ...branch,
+                                    employees: branch.employees.map(emp => 
+                                      emp.id === employee.id 
+                                        ? { ...emp, isPresent: newIsPresent }
+                                        : emp
+                                    )
+                                  }))
+                                );
+                                
+                                // Background'da serverga saqlaymiz
+                                try {
+                                  await api.updateEmployee(employee.id, {
+                                    name: employee.name,
+                                    position: employee.position,
+                                    percentage: employee.percentage,
+                                    isPresent: newIsPresent
+                                  });
+                                } catch (error) {
+                                  // Xato bo'lsa, qayta yuklaymiz
+                                  await loadBranches(false);
+                                }
+                              }}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                          </label>
+                        </div>
+                      )}
+                      
                       {/* Foiz */}
                       <div className="flex items-center justify-between">
                         <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Foiz:</span>

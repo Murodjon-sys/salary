@@ -9,7 +9,14 @@
     "start": "node server/index.js",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "close-day": "node server/cronJob.js",
+    "close-day:date": "node server/cronJob.js",
+    "close-now": "node manual-close-today.js",
+    "test-auto-close": "node test-auto-close.js",
+    "setup-cron": "bash setup-cron.sh",
+    "logs": "tail -f logs/daily-closing.log",
+    "test-closing": "node test-daily-closing.js"
   },
   "dependencies": {
     "@react-router/node": "7.10.1",

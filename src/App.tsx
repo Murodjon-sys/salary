@@ -1096,40 +1096,25 @@ export default function App() {
     }
     
     let percentage = employee.percentage;
-    let calculatedSalary = 0;
     let baseSalary = 0; // Asosiy oylik (vazifalar foizisiz)
     
     // Agar sotuvchi bo'lsa
     if (employee.position === "sotuvchi") {
-      // YANGI LOGIKA: Umumiy savdoni faqat kelgan sotuvchilarga bo'lib berish
-      
       // Agar sotuvchi kelmagan bo'lsa, oylik 0
       if (!employee.isPresent) {
         return 0;
       }
       
-      // Kelgan sotuvchilar sonini hisoblash
-      const presentSellers = currentBranch.employees.filter(emp => emp.position === 'sotuvchi' && emp.isPresent);
-      const presentSellersCount = presentSellers.length;
-      
-      if (presentSellersCount === 0) {
-        return 0;
-      }
-      
-      // Umumiy savdoni kelgan sotuvchilar soniga bo'lamiz
-      const totalSales = currentBranch.totalSales || 0;
-      
+      // MODALGA MOS: Sotuvchi o'zi qilgan savdodan hisoblash (VAZIFALAR FOIZISIZ!)
       // Chakana savdo (to'liq foiz)
-      const retailSales = currentBranch.retailSales || 0;
-      const retailPerSeller = retailSales / presentSellersCount;
-      const retailSalary = (retailPerSeller * percentage) / 100;
+      const employeeRetailSales = employee.dailySales || 0;
+      const retailSalary = (employeeRetailSales * percentage) / 100;
       
       // Optom savdo (yarim foiz)
-      const wholesaleSales = currentBranch.wholesaleSales || 0;
-      const wholesalePerSeller = wholesaleSales / presentSellersCount;
-      const wholesaleSalary = (wholesalePerSeller * percentage) / 100 / 2;
+      const employeeWholesaleSales = employee.wholesaleSales || 0;
+      const wholesaleSalary = (employeeWholesaleSales * percentage) / 100 / 2;
       
-      // Jami asosiy oylik
+      // Jami asosiy oylik (VAZIFALAR FOIZISIZ!)
       baseSalary = retailSalary + wholesaleSalary;
     } else {
       // Boshqa xodimlar uchun
@@ -1162,33 +1147,34 @@ export default function App() {
       }
     }
     
-    // BARCHA XODIMLAR UCHUN: Vazifalar tekshiruvi
-    if (employee.dailyTasks && Object.keys(employee.dailyTasks).length > 0) {
-      // Bajarilgan vazifalar sonini hisoblaymiz
-      const completedTasks = Object.values(employee.dailyTasks).filter(task => task === true).length;
+    // MUHIM: Jami savdodan ulush bonusini REAL-TIME hisoblash (bazadan emas!)
+    // Bu sotuvchilar soni o'zgarganda avtomatik yangilanadi
+    let salesShareBonus = 0;
+    if (employee.position === "sotuvchi" && employee.isPresent) {
+      const retailSalesOnly = currentBranch.retailSales || 0;
+      const salesSharePercentage = 0.5;
+      const totalShareBonus = (retailSalesOnly * salesSharePercentage) / 100;
+      const presentSellersCount = currentBranch.employees.filter(emp => emp.position === 'sotuvchi' && emp.isPresent).length;
       
-      // Har bir xodimning o'z vazifalar sonini ishlatamiz
-      const totalTasks = Object.keys(employee.dailyTasks).length;
-      
-      // Bajarilmagan vazifalar soni
-      const incompleteTasks = totalTasks - completedTasks;
-      
-      // Har bir bajarilmagan vazifa uchun 10% kamayadi
-      const taskPercentage = 100 - (incompleteTasks * 10);
-      
-      // Vazifalar foizini qo'llash
-      calculatedSalary = (baseSalary * taskPercentage) / 100;
-    } else {
-      calculatedSalary = baseSalary;
+      if (presentSellersCount > 0) {
+        salesShareBonus = totalShareBonus / presentSellersCount;
+      }
     }
     
-    // Standart oylik (bonus) qo'shish
+    // O'zi qilgan savdodan 0.5% bonusini hisoblash (faqat sotuvchilar uchun)
+    let teamVolumeBonus = 0;
+    if (employee.position === "sotuvchi" && employee.isPresent) {
+      const employeeRetailSales = employee.dailySales || 0;
+      teamVolumeBonus = (employeeRetailSales * 0.5) / 100;
+    }
+    
+    // MODALGA MOS: Vazifalar foizisiz, faqat bonuslar qo'shiladi
     // MUHIM: Sotuvchilar uchun fixedBonus qo'shilmaydi, faqat boshqa bonuslar
     if (employee.position === "sotuvchi") {
-      return calculatedSalary + (employee.personalBonus || 0) + (employee.salesShareBonus || 0) + (employee.planBonus || 0);
+      return baseSalary + (employee.personalBonus || 0) + teamVolumeBonus + salesShareBonus + (employee.planBonus || 0);
     } else {
       // Sotuvchi bo'lmagan xodimlar uchun barcha bonuslar
-      return calculatedSalary + (employee.fixedBonus || 0) + (employee.personalBonus || 0) + (employee.salesShareBonus || 0) + (employee.planBonus || 0);
+      return baseSalary + (employee.fixedBonus || 0) + (employee.personalBonus || 0) + salesShareBonus + (employee.planBonus || 0);
     }
   };
 
@@ -1202,30 +1188,20 @@ export default function App() {
     let baseSalary = 0;
     
     if (employee.position === 'sotuvchi') {
-      // Sotuvchi uchun: umumiy savdodan ulush
+      // Sotuvchi uchun: o'zi qilgan savdodan hisoblash
       
       // Agar sotuvchi kelmagan bo'lsa, jarima ham yo'q
       if (!employee.isPresent) {
         return 0;
       }
       
-      // Kelgan sotuvchilar sonini hisoblash
-      const presentSellers = currentBranch.employees.filter(emp => emp.position === 'sotuvchi' && emp.isPresent);
-      const presentSellersCount = presentSellers.length;
-      
-      if (presentSellersCount === 0) {
-        return 0;
-      }
-      
       // Chakana savdo (to'liq foiz)
-      const retailSales = currentBranch.retailSales || 0;
-      const retailPerSeller = retailSales / presentSellersCount;
-      const retailSalary = (retailPerSeller * employee.percentage) / 100;
+      const employeeRetailSales = employee.dailySales || 0;
+      const retailSalary = (employeeRetailSales * employee.percentage) / 100;
       
       // Optom savdo (yarim foiz)
-      const wholesaleSales = currentBranch.wholesaleSales || 0;
-      const wholesalePerSeller = wholesaleSales / presentSellersCount;
-      const wholesaleSalary = (wholesalePerSeller * employee.percentage) / 100 / 2;
+      const employeeWholesaleSales = employee.wholesaleSales || 0;
+      const wholesaleSalary = (employeeWholesaleSales * employee.percentage) / 100 / 2;
       
       // Jami asosiy oylik
       baseSalary = retailSalary + wholesaleSalary;
@@ -4492,6 +4468,7 @@ export default function App() {
                           ((parseFloat(wholesaleSalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100 / 2) +
                           (parseFloat(bonusInput.replace(/,/g, "")) || 0) +
                           (parseFloat(personalBonusInput.replace(/,/g, "")) || 0) +
+                          (parseFloat(teamVolumeBonusInput.replace(/,/g, "")) || 0) +
                           (parseFloat(salesShareBonusInput.replace(/,/g, "")) || 0)
                         )}
                       </span>

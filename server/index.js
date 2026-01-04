@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { regosService } from './regosIntegration.js';
+import { closeDailySalary } from './dailyClosingService.js';
 
 dotenv.config();
 
@@ -1443,8 +1444,13 @@ app.post('/api/migrate-clear-seller-fixedbonus', async (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  
   // Oylik planni avtomatik saqlash uchun tekshirish
   startMonthlyPlanAutoSave();
+  
+  // Kunlik yopish uchun avtomatik tekshirish
+  startDailyClosingAutoCheck();
 });
 
 // ============================================
@@ -1467,6 +1473,58 @@ function startMonthlyPlanAutoSave() {
   
   // Server ishga tushganda ham tekshirish
   checkAndSaveMonthlyPlan();
+}
+
+// ============================================
+// KUNLIK YOPISHNI AVTOMATIK TEKSHIRISH
+// ============================================
+
+let lastClosingDate = null; // Oxirgi yopilgan sana
+
+function startDailyClosingAutoCheck() {
+  console.log('[AUTO-CLOSE] Kunlik avtomatik yopish tizimi ishga tushdi');
+  
+  // Har daqiqada tekshirish
+  setInterval(async () => {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    
+    // Soat 23:59 da yopish
+    if (hour === 23 && minute === 59) {
+      const today = now.toISOString().split('T')[0];
+      
+      // Agar bugun allaqachon yopilmagan bo'lsa
+      if (lastClosingDate !== today) {
+        console.log(`[AUTO-CLOSE] Soat 23:59 - Kunlik yopish boshlanmoqda: ${today}`);
+        await performDailyClosing(today);
+        lastClosingDate = today;
+      }
+    }
+  }, 60000); // Har daqiqada tekshirish
+  
+  console.log('[AUTO-CLOSE] Tizim har kuni soat 23:59 da avtomatik yopadi');
+}
+
+async function performDailyClosing(targetDate) {
+  try {
+    console.log(`[AUTO-CLOSE] Yopish jarayoni boshlandi: ${targetDate}`);
+    
+    const models = { Branch, Employee, DailySalesHistory };
+    const result = await closeDailySalary(models, targetDate);
+    
+    if (result.success) {
+      console.log(`[AUTO-CLOSE] ✓ Muvaffaqiyatli yopildi: ${targetDate}`);
+      console.log(`[AUTO-CLOSE]   - Filiallar: ${result.branchesProcessed}`);
+      console.log(`[AUTO-CLOSE]   - Xodimlar: ${result.employeesProcessed}`);
+      console.log(`[AUTO-CLOSE]   - Jami oylik: ${result.totalSalaryAmount.toFixed(2)}`);
+      console.log(`[AUTO-CLOSE]   - Jami jarima: ${result.totalPenaltyAmount.toFixed(2)}`);
+    } else {
+      console.error(`[AUTO-CLOSE] ✗ Xatolik: ${result.error}`);
+    }
+  } catch (error) {
+    console.error(`[AUTO-CLOSE] ✗ Fatal xatolik:`, error);
+  }
 }
 
 async function checkAndSaveMonthlyPlan() {
@@ -1727,6 +1785,48 @@ app.delete('/api/monthly-plan/history/:historyId', async (req, res) => {
     res.status(500).json({ 
       ok: false, 
       error: error.message 
+    });
+  }
+});
+
+// ============================================
+// AUTOMATIC DAILY CLOSING ENDPOINT
+// ============================================
+
+/**
+ * Manual trigger for daily closing (Admin only)
+ * POST /api/salary/close-day
+ * Body: { date: "YYYY-MM-DD" } (optional, defaults to today)
+ */
+app.post('/api/salary/close-day', async (req, res) => {
+  try {
+    const { date } = req.body;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    
+    console.log(`[API] Manual daily closing triggered for date: ${targetDate}`);
+    
+    // Execute daily closing
+    const models = { Branch, Employee, DailySalesHistory };
+    const result = await closeDailySalary(models, targetDate);
+    
+    if (result.success) {
+      res.json({
+        ok: true,
+        message: 'Kunlik savdo muvaffaqiyatli yopildi',
+        ...result
+      });
+    } else {
+      res.status(500).json({
+        ok: false,
+        error: result.error,
+        ...result
+      });
+    }
+  } catch (error) {
+    console.error('[API] Error during manual daily closing:', error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
     });
   }
 });

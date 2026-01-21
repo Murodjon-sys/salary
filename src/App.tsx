@@ -695,9 +695,13 @@ export default function App() {
       setPersonalBonusInput("");
     }
     
-    // O'zi qilgan savdodan 0.5% hisoblash (faqat chakana savdo)
+    // O'zi qilgan savdodan 0.5% hisoblash
+    // Chakana: to'liq 0.5%, Optom: yarim 0.5%
     const employeeRetailSales = employee.dailySales || 0;
-    const personalSalesBonus = (employeeRetailSales * 0.5) / 100;
+    const employeeWholesaleSales = employee.wholesaleSales || 0;
+    const retailBonus = (employeeRetailSales * 0.5) / 100;
+    const wholesaleBonus = (employeeWholesaleSales * 0.5) / 100 / 2;
+    const personalSalesBonus = retailBonus + wholesaleBonus;
     if (personalSalesBonus > 0) {
       setTeamVolumeBonusInput(formatNumber(Math.round(personalSalesBonus)));
     } else {
@@ -1149,11 +1153,20 @@ export default function App() {
     
     // MUHIM: Jami savdodan ulush bonusini REAL-TIME hisoblash (bazadan emas!)
     // Bu sotuvchilar soni o'zgarganda avtomatik yangilanadi
+    // CHAKANA: to'liq 0.5%, OPTOM: yarim 0.5% (0.25%)
     let salesShareBonus = 0;
     if (employee.position === "sotuvchi" && employee.isPresent) {
       const retailSalesOnly = currentBranch.retailSales || 0;
+      const wholesaleSalesOnly = currentBranch.wholesaleSales || 0;
       const salesSharePercentage = 0.5;
-      const totalShareBonus = (retailSalesOnly * salesSharePercentage) / 100;
+      
+      // Chakana savdodan to'liq 0.5%
+      const retailShareBonus = (retailSalesOnly * salesSharePercentage) / 100;
+      
+      // Optom savdodan yarim 0.5% (0.25%)
+      const wholesaleShareBonus = (wholesaleSalesOnly * salesSharePercentage) / 100 / 2;
+      
+      const totalShareBonus = retailShareBonus + wholesaleShareBonus;
       const presentSellersCount = currentBranch.employees.filter(emp => emp.position === 'sotuvchi' && emp.isPresent).length;
       
       if (presentSellersCount > 0) {
@@ -1162,19 +1175,28 @@ export default function App() {
     }
     
     // O'zi qilgan savdodan 0.5% bonusini hisoblash (faqat sotuvchilar uchun)
+    // CHAKANA: to'liq 0.5%, OPTOM: yarim 0.5% (0.25%)
     let teamVolumeBonus = 0;
     if (employee.position === "sotuvchi" && employee.isPresent) {
       const employeeRetailSales = employee.dailySales || 0;
-      teamVolumeBonus = (employeeRetailSales * 0.5) / 100;
+      const employeeWholesaleSales = employee.wholesaleSales || 0;
+      
+      // Chakana savdodan to'liq 0.5%
+      const retailBonus = (employeeRetailSales * 0.5) / 100;
+      
+      // Optom savdodan yarim 0.5% (0.25%)
+      const wholesaleBonus = (employeeWholesaleSales * 0.5) / 100 / 2;
+      
+      teamVolumeBonus = retailBonus + wholesaleBonus;
     }
     
     // MODALGA MOS: Vazifalar foizisiz, faqat bonuslar qo'shiladi
-    // MUHIM: Sotuvchilar uchun fixedBonus qo'shilmaydi, faqat boshqa bonuslar
+    // MUHIM: Sotuvchilar uchun fixedBonus va planBonus qo'shilmaydi (planBonus faqat oylik hisobotda)
     if (employee.position === "sotuvchi") {
-      return baseSalary + (employee.personalBonus || 0) + teamVolumeBonus + salesShareBonus + (employee.planBonus || 0);
+      return baseSalary + (employee.personalBonus || 0) + teamVolumeBonus + salesShareBonus;
     } else {
-      // Sotuvchi bo'lmagan xodimlar uchun barcha bonuslar
-      return baseSalary + (employee.fixedBonus || 0) + (employee.personalBonus || 0) + salesShareBonus + (employee.planBonus || 0);
+      // Sotuvchi bo'lmagan xodimlar uchun barcha bonuslar (planBonus dan tashqari)
+      return baseSalary + (employee.fixedBonus || 0) + (employee.personalBonus || 0) + salesShareBonus;
     }
   };
 
@@ -1225,7 +1247,7 @@ export default function App() {
       }
     }
     
-    const actualSalary = calculateSalary(employee) - (employee.fixedBonus || 0) - (employee.personalBonus || 0) - (employee.salesShareBonus || 0) - (employee.planBonus || 0); // Bonuslarni ayiramiz
+    const actualSalary = calculateSalary(employee) - (employee.fixedBonus || 0) - (employee.personalBonus || 0) - (employee.salesShareBonus || 0); // Bonuslarni ayiramiz (planBonus kunlik hisobda yo'q)
     const penalty = baseSalary - actualSalary;
     
     return penalty;
@@ -1239,7 +1261,8 @@ export default function App() {
   };
 
   const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat("uz-UZ").format(amount) + " so'm";
+    // Raqamni bo'sh joy bilan formatlash (190 000 so'm)
+    return new Intl.NumberFormat("ru-RU").format(Math.round(amount)).replace(/,/g, ' ') + " so'm";
   };
 
   if (loading) {
@@ -4203,15 +4226,22 @@ export default function App() {
                         const cleaned = e.target.value.replace(/[^\d]/g, "");
                         if (cleaned === "") {
                           setDailySalesInput("");
-                          setTeamVolumeBonusInput(""); // O'zi qilgan savdodan bonusni ham tozalaymiz
+                          // Optom savdo bo'lsa, faqat undan hisoblash
+                          const wholesaleValue = parseFloat(wholesaleSalesInput.replace(/,/g, "")) || 0;
+                          const wholesaleBonus = (wholesaleValue * 0.5) / 100 / 2;
+                          setTeamVolumeBonusInput(wholesaleBonus > 0 ? formatNumber(Math.round(wholesaleBonus)) : "");
                           return;
                         }
                         const numValue = parseFloat(cleaned);
                         setDailySalesInput(formatNumber(numValue));
                         
                         // O'zi qilgan savdodan 0.5% ni avtomatik hisoblash
-                        const personalSalesBonus = (numValue * 0.5) / 100;
-                        setTeamVolumeBonusInput(formatNumber(Math.round(personalSalesBonus)));
+                        // Chakana: to'liq 0.5%, Optom: yarim 0.5%
+                        const retailBonus = (numValue * 0.5) / 100;
+                        const wholesaleValue = parseFloat(wholesaleSalesInput.replace(/,/g, "")) || 0;
+                        const wholesaleBonus = (wholesaleValue * 0.5) / 100 / 2;
+                        const totalBonus = retailBonus + wholesaleBonus;
+                        setTeamVolumeBonusInput(formatNumber(Math.round(totalBonus)));
                       }}
                       onKeyPress={(e) => {
                         if (e.key === 'Enter') {
@@ -4242,10 +4272,22 @@ export default function App() {
                         const cleaned = e.target.value.replace(/[^\d]/g, "");
                         if (cleaned === "") {
                           setWholesaleSalesInput("");
+                          // Chakana savdo bo'lsa, faqat undan hisoblash
+                          const retailValue = parseFloat(dailySalesInput.replace(/,/g, "")) || 0;
+                          const retailBonus = (retailValue * 0.5) / 100;
+                          setTeamVolumeBonusInput(retailBonus > 0 ? formatNumber(Math.round(retailBonus)) : "");
                           return;
                         }
                         const numValue = parseFloat(cleaned);
                         setWholesaleSalesInput(formatNumber(numValue));
+                        
+                        // O'zi qilgan savdodan 0.5% ni avtomatik hisoblash
+                        // Chakana: to'liq 0.5%, Optom: yarim 0.5%
+                        const retailValue = parseFloat(dailySalesInput.replace(/,/g, "")) || 0;
+                        const retailBonus = (retailValue * 0.5) / 100;
+                        const wholesaleBonus = (numValue * 0.5) / 100 / 2;
+                        const totalBonus = retailBonus + wholesaleBonus;
+                        setTeamVolumeBonusInput(formatNumber(Math.round(totalBonus)));
                       }}
                       onKeyPress={(e) => {
                         if (e.key === 'Enter') {
@@ -4466,7 +4508,7 @@ export default function App() {
                         {formatMoney(
                           ((parseFloat(dailySalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100) +
                           ((parseFloat(wholesaleSalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100 / 2) +
-                          (parseFloat(bonusInput.replace(/,/g, "")) || 0) +
+                          (selectedEmployee.position !== "sotuvchi" ? (parseFloat(bonusInput.replace(/,/g, "")) || 0) : 0) +
                           (parseFloat(personalBonusInput.replace(/,/g, "")) || 0) +
                           (parseFloat(teamVolumeBonusInput.replace(/,/g, "")) || 0) +
                           (parseFloat(salesShareBonusInput.replace(/,/g, "")) || 0)

@@ -527,7 +527,8 @@ export default function App() {
   };
 
   const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat("uz-UZ").format(amount) + " so'm";
+    // Raqamni bo'sh joy bilan formatlash (190 000 so'm)
+    return new Intl.NumberFormat("ru-RU").format(Math.round(amount)).replace(/,/g, ' ') + " so'm";
   };
 
   if (loading) {

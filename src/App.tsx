@@ -1210,11 +1210,13 @@ export default function App() {
     }
     
     // MODALGA MOS: Vazifalar foizisiz, faqat bonuslar qo'shiladi
-    // MUHIM: Sotuvchilar uchun fixedBonus va planBonus qo'shilmaydi (planBonus faqat oylik hisobotda)
+    // MUHIM: Sotuvchilar uchun baseSalary QOSHILMAYDI (faqat bonuslar)
     if (employee.position === "sotuvchi") {
-      return baseSalary + (employee.personalBonus || 0) + teamVolumeBonus + salesShareBonus;
+      // Sotuvchilar uchun: FAQAT personalBonus va teamVolumeBonus
+      // salesShareBonus QOSHILMAYDI (chunki teamVolumeBonus allaqachon o'z savdosidan hisoblangan)
+      return (employee.personalBonus || 0) + teamVolumeBonus;
     } else {
-      // Sotuvchi bo'lmagan xodimlar uchun barcha bonuslar (planBonus dan tashqari)
+      // Sotuvchi bo'lmagan xodimlar uchun: baseSalary + bonuslar
       return baseSalary + (employee.fixedBonus || 0) + (employee.personalBonus || 0) + salesShareBonus;
     }
   };
@@ -4584,83 +4586,121 @@ export default function App() {
                   </div>
                   
                   <div className="space-y-2 text-sm text-gray-700">
-                    {dailySalesInput && (
-                      <div className="flex justify-between items-center py-1">
-                        <span className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                          Chakana:
-                        </span>
-                        <span className="font-bold text-green-600">
-                          {formatMoney((parseFloat(dailySalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100)}
-                        </span>
-                      </div>
-                    )}
-                    {wholesaleSalesInput && (
-                      <div className="flex justify-between items-center py-1">
-                        <span className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                          Optom (÷2):
-                        </span>
-                        <span className="font-bold text-blue-600">
-                          {formatMoney((parseFloat(wholesaleSalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100 / 2)}
-                        </span>
-                      </div>
-                    )}
-                    {bonusInput && parseFloat(bonusInput.replace(/,/g, "")) > 0 && (
-                      <div className="flex justify-between items-center py-1">
-                        <span className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-                          Standart oylik:
-                        </span>
-                        <span className="font-bold text-purple-600">
-                          + {formatMoney(parseFloat(bonusInput.replace(/,/g, "")) || 0)}
-                        </span>
-                      </div>
-                    )}
-                    {personalBonusInput && parseFloat(personalBonusInput.replace(/,/g, "")) > 0 && (
-                      <div className="flex justify-between items-center py-1">
-                        <span className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                          Shaxsiy bonus:
-                        </span>
-                        <span className="font-bold text-indigo-600">
-                          + {formatMoney(parseFloat(personalBonusInput.replace(/,/g, "")) || 0)}
-                        </span>
-                      </div>
-                    )}
-                    {teamVolumeBonusInput && parseFloat(teamVolumeBonusInput.replace(/,/g, "")) > 0 && (
-                      <div className="flex justify-between items-center py-1">
-                        <span className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-teal-500"></span>
-                          O'z savdosi (0.5%):
-                        </span>
-                        <span className="font-bold text-teal-600">
-                          + {formatMoney(parseFloat(teamVolumeBonusInput.replace(/,/g, "")) || 0)}
-                        </span>
-                      </div>
-                    )}
-                    {salesShareBonusInput && parseFloat(salesShareBonusInput.replace(/,/g, "")) > 0 && (
-                      <div className="flex justify-between items-center py-1">
-                        <span className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                          Savdo ulushi (0.5%):
-                        </span>
-                        <span className="font-bold text-emerald-600">
-                          + {formatMoney(parseFloat(salesShareBonusInput.replace(/,/g, "")) || 0)}
-                        </span>
-                      </div>
+                    {/* Sotuvchi uchun: faqat bonuslarni ko'rsatamiz */}
+                    {selectedEmployee.position === "sotuvchi" ? (
+                      <>
+                        {bonusInput && parseFloat(bonusInput.replace(/,/g, "")) > 0 && (
+                          <div className="flex justify-between items-center py-1">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                              Standart oylik:
+                            </span>
+                            <span className="font-bold text-purple-600">
+                              + {formatMoney(parseFloat(bonusInput.replace(/,/g, "")) || 0)}
+                            </span>
+                          </div>
+                        )}
+                        {personalBonusInput && parseFloat(personalBonusInput.replace(/,/g, "")) > 0 && (
+                          <div className="flex justify-between items-center py-1">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                              Shaxsiy bonus:
+                            </span>
+                            <span className="font-bold text-indigo-600">
+                              + {formatMoney(parseFloat(personalBonusInput.replace(/,/g, "")) || 0)}
+                            </span>
+                          </div>
+                        )}
+                        {teamVolumeBonusInput && parseFloat(teamVolumeBonusInput.replace(/,/g, "")) > 0 && (
+                          <div className="flex justify-between items-center py-1">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-teal-500"></span>
+                              O'zi savdosi (0.5%):
+                            </span>
+                            <span className="font-bold text-teal-600">
+                              + {formatMoney(parseFloat(teamVolumeBonusInput.replace(/,/g, "")) || 0)}
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {/* Boshqa xodimlar uchun: chakana va optom ko'rsatamiz */}
+                        {dailySalesInput && (
+                          <div className="flex justify-between items-center py-1">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                              Chakana:
+                            </span>
+                            <span className="font-bold text-green-600">
+                              {formatMoney((parseFloat(dailySalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100)}
+                            </span>
+                          </div>
+                        )}
+                        {wholesaleSalesInput && (
+                          <div className="flex justify-between items-center py-1">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                              Optom (÷2):
+                            </span>
+                            <span className="font-bold text-blue-600">
+                              {formatMoney((parseFloat(wholesaleSalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100 / 2)}
+                            </span>
+                          </div>
+                        )}
+                        {bonusInput && parseFloat(bonusInput.replace(/,/g, "")) > 0 && (
+                          <div className="flex justify-between items-center py-1">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                              Standart oylik:
+                            </span>
+                            <span className="font-bold text-purple-600">
+                              + {formatMoney(parseFloat(bonusInput.replace(/,/g, "")) || 0)}
+                            </span>
+                          </div>
+                        )}
+                        {personalBonusInput && parseFloat(personalBonusInput.replace(/,/g, "")) > 0 && (
+                          <div className="flex justify-between items-center py-1">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                              Shaxsiy bonus:
+                            </span>
+                            <span className="font-bold text-indigo-600">
+                              + {formatMoney(parseFloat(personalBonusInput.replace(/,/g, "")) || 0)}
+                            </span>
+                          </div>
+                        )}
+                        {salesShareBonusInput && parseFloat(salesShareBonusInput.replace(/,/g, "")) > 0 && (
+                          <div className="flex justify-between items-center py-1">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                              Savdo ulushi (0.5%):
+                            </span>
+                            <span className="font-bold text-emerald-600">
+                              + {formatMoney(parseFloat(salesShareBonusInput.replace(/,/g, "")) || 0)}
+                            </span>
+                          </div>
+                        )}
+                      </>
                     )}
                     
                     <div className="flex justify-between items-center pt-3 mt-3 border-t-2 border-orange-300">
                       <span className="font-bold text-base">JAMI OYLIK:</span>
                       <span className="font-bold text-xl text-[#F87819]">
                         {formatMoney(
-                          ((parseFloat(dailySalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100) +
-                          ((parseFloat(wholesaleSalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100 / 2) +
-                          (selectedEmployee.position !== "sotuvchi" ? (parseFloat(bonusInput.replace(/,/g, "")) || 0) : 0) +
-                          (parseFloat(personalBonusInput.replace(/,/g, "")) || 0) +
-                          (parseFloat(teamVolumeBonusInput.replace(/,/g, "")) || 0) +
-                          (parseFloat(salesShareBonusInput.replace(/,/g, "")) || 0)
+                          selectedEmployee.position === "sotuvchi" ? (
+                            // Sotuvchi uchun: faqat bonuslar (salesShareBonus yo'q!)
+                            (parseFloat(bonusInput.replace(/,/g, "")) || 0) +
+                            (parseFloat(personalBonusInput.replace(/,/g, "")) || 0) +
+                            (parseFloat(teamVolumeBonusInput.replace(/,/g, "")) || 0)
+                          ) : (
+                            // Boshqa xodimlar uchun: chakana + optom + bonuslar
+                            ((parseFloat(dailySalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100) +
+                            ((parseFloat(wholesaleSalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100 / 2) +
+                            (parseFloat(bonusInput.replace(/,/g, "")) || 0) +
+                            (parseFloat(personalBonusInput.replace(/,/g, "")) || 0) +
+                            (parseFloat(salesShareBonusInput.replace(/,/g, "")) || 0)
+                          )
                         )}
                       </span>
                     </div>

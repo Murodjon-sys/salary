@@ -120,6 +120,7 @@ export default function App() {
   
   // Hisobotlar uchun state
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [selectedDay, setSelectedDay] = useState<string>(""); // YYYY-MM-DD (bo'sh = oylik)
   const [monthlyReports, setMonthlyReports] = useState<any[]>([]);
   const [showAllEmployees, setShowAllEmployees] = useState(false); // Barcha xodimlarni ko'rsatish
 
@@ -142,6 +143,7 @@ export default function App() {
   const [historyToDelete, setHistoryToDelete] = useState<any | null>(null);
   const [savedDate, setSavedDate] = useState<string>("");
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true); // Desktop uchun sidebar holati
   const [showFixTasksModal, setShowFixTasksModal] = useState(false);
   const [showFixTasksSuccessModal, setShowFixTasksSuccessModal] = useState(false);
   const [showNoIssuesModal, setShowNoIssuesModal] = useState(false);
@@ -175,6 +177,9 @@ export default function App() {
 
   // Tarixni tahrirlashni bloklash uchun state
   const [isHistoryLocked, setIsHistoryLocked] = useState(true); // Default: yoniq (bloklangan)
+
+  // Tarix sahifasi uchun sana filtri
+  const [historyFilterDate, setHistoryFilterDate] = useState<string>(""); // Bo'sh = barcha kunlar
 
   // Tarix modalida tahrirlash uchun state
   const [editingHistoryEmployee, setEditingHistoryEmployee] = useState<any | null>(null);
@@ -480,13 +485,18 @@ export default function App() {
     }
   }, []);
 
-  const loadHistory = async () => {
+  const loadHistory = async (filterDate?: string) => {
     try {
       // Barcha filiallarning tarixini yuklaymiz
       const allHistory: any[] = [];
       
+      // Agar sana tanlangan bo'lsa, faqat o'sha kunni yuklaymiz
+      const startDate = filterDate || undefined;
+      const endDate = filterDate || undefined;
+      const limit = filterDate ? 100 : 30; // Agar sana tanlangan bo'lsa, ko'proq yozuv yuklaymiz
+      
       for (const branch of branches) {
-        const result = await api.getHistory(branch._id, undefined, undefined, 30);
+        const result = await api.getHistory(branch._id, startDate, endDate, limit);
         if (result.ok && result.history.length > 0) {
           allHistory.push(...result.history);
         }
@@ -500,13 +510,22 @@ export default function App() {
   };
 
   // Oylik hisobotlarni yuklash
-  const loadMonthlyReports = async (branchId: string, month: string) => {
+  const loadMonthlyReports = async (branchId: string, month: string, day?: string) => {
     try {
-      // month format: YYYY-MM
-      const [year, monthNum] = month.split('-');
-      const startDate = `${year}-${monthNum}-01`;
-      const lastDay = new Date(parseInt(year), parseInt(monthNum), 0).getDate();
-      const endDate = `${year}-${monthNum}-${lastDay}`;
+      let startDate: string;
+      let endDate: string;
+      
+      if (day) {
+        // Agar kun tanlangan bo'lsa, faqat o'sha kunni yuklaymiz
+        startDate = day;
+        endDate = day;
+      } else {
+        // Aks holda, butun oyni yuklaymiz
+        const [year, monthNum] = month.split('-');
+        startDate = `${year}-${monthNum}-01`;
+        const lastDay = new Date(parseInt(year), parseInt(monthNum), 0).getDate();
+        endDate = `${year}-${monthNum}-${lastDay}`;
+      }
       
       const result = await api.getHistory(branchId, startDate, endDate, 100);
       if (result.ok) {
@@ -1545,7 +1564,7 @@ export default function App() {
 
   return (
     <div className={`flex h-screen overflow-hidden ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
-      {/* Mobile Overlay */}
+      {/* Mobile Overlay - faqat mobil uchun */}
       {isMobileSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -1553,14 +1572,25 @@ export default function App() {
         />
       )}
 
-      {/* Sidebar */}
-      <div className={`
-        fixed lg:static inset-y-0 left-0 z-50
-        w-72 bg-gradient-to-b from-gray-900 via-gray-900 to-black border-r border-gray-800 
+      {/* Sidebar - Desktop: flexbox, Mobile: fixed */}
+      <aside className={`
+        flex-shrink-0 bg-gradient-to-b from-gray-900 via-gray-900 to-black border-r border-gray-800 
         flex flex-col shadow-2xl
-        transform transition-transform duration-300 ease-in-out
-        ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        transition-all duration-300 ease-in-out
+        
+        /* Mobile: fixed position with overlay */
+        fixed lg:relative inset-y-0 left-0 z-40 lg:z-auto
+        ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        
+        /* Desktop: flexbox width control (no fixed/absolute) */
+        lg:translate-x-0
+        ${isDesktopSidebarOpen ? 'lg:w-72' : 'lg:w-0 lg:border-0'}
       `}>
+        <div className={`
+          w-72 h-full flex flex-col
+          transition-opacity duration-300
+          ${isDesktopSidebarOpen ? 'lg:opacity-100' : 'lg:opacity-0 lg:pointer-events-none'}
+        `}>
         {/* Header - Logo va Close button */}
         <div className="p-4 border-b border-gray-800 flex-shrink-0">
           <div className="flex items-center justify-between">
@@ -1860,22 +1890,38 @@ export default function App() {
             </>
           )}
         </div>
-      </div>
+        </div>
+      </aside>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto">
-        {/* Mobile Header */}
-        <div className={`lg:hidden sticky top-0 z-30 border-b px-4 py-3 flex items-center justify-between shadow-sm ${
+      <main className="flex-1 overflow-auto transition-all duration-300">
+        {/* Header - Mobile va Desktop */}
+        <div className={`sticky top-0 z-50 border-b px-4 py-3 flex items-center justify-between shadow-sm ${
           isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
         }`}>
+          {/* Burger Menu - Mobile va Desktop */}
           <button
-            onClick={() => setIsMobileSidebarOpen(true)}
-            className={isDarkMode ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('Burger menu clicked!'); // Debug uchun
+              if (window.innerWidth >= 1024) {
+                setIsDesktopSidebarOpen(!isDesktopSidebarOpen);
+              } else {
+                setIsMobileSidebarOpen(true);
+              }
+            }}
+            className={`p-2 rounded-lg transition-colors cursor-pointer hover:bg-opacity-80 ${
+              isDarkMode ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+            title="Menu"
+            style={{ zIndex: 100 }}
           >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-6 h-6 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
+          
           <h1 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
             {activeView === "branches" ? currentBranch?.name : 
              activeView === "history" ? "Tarix" :
@@ -1884,7 +1930,8 @@ export default function App() {
              activeView === "plans" ? "Oylik Plan" :
              activeView === "planHistory" ? "Oylik Plan Tarixi" : "Kunlik Ishlar"}
           </h1>
-          {/* Dark Mode Toggle - Mobile */}
+          
+          {/* Dark Mode Toggle */}
           <button
             onClick={toggleDarkMode}
             className={`p-2 rounded-lg transition-colors ${
@@ -2603,13 +2650,52 @@ export default function App() {
         {activeView === "history" && (
           <div className="w-full mx-auto p-4 md:p-6 lg:p-8 max-w-[1920px]">
             {/* Tarix sahifasi */}
-            <div className="mb-8 flex items-center justify-between">
-              <div>
-                <h1 className={`text-2xl font-semibold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Savdo Tarixi</h1>
-                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Barcha filiallar - Oxirgi 30 kun</p>
+            <div className="mb-8">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+                <div>
+                  <h1 className={`text-2xl font-semibold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Savdo Tarixi</h1>
+                  <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {historyFilterDate ? `Tanlangan sana: ${formatUzbekDate(historyFilterDate)}` : 'Barcha filiallar - Oxirgi 30 kun'}
+                  </p>
+                </div>
+
+                {/* Sana tanlash */}
+                <div className="flex items-center gap-3">
+                  <div className={`flex items-center gap-2 px-4 py-2 rounded-xl ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                    <svg className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <input
+                      type="date"
+                      value={historyFilterDate}
+                      onChange={(e) => {
+                        setHistoryFilterDate(e.target.value);
+                        loadHistory(e.target.value || undefined);
+                      }}
+                      className={`px-2 py-1 rounded-lg text-sm font-medium border-none outline-none ${
+                        isDarkMode 
+                          ? 'bg-gray-700 text-white' 
+                          : 'bg-white text-gray-900'
+                      }`}
+                    />
+                    {historyFilterDate && (
+                      <button
+                        onClick={() => {
+                          setHistoryFilterDate("");
+                          loadHistory(undefined);
+                        }}
+                        className="ml-2 text-red-500 hover:text-red-600 transition-colors"
+                        title="Filterni tozalash"
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
-              
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-4">
                 {/* Tarixni tahrirlash toggle */}
                 {isAuthenticated && userRole === 'admin' && (
                   <div className={`flex items-center gap-3 px-4 py-2 rounded-xl ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
@@ -3249,8 +3335,14 @@ export default function App() {
           <div className="w-full mx-auto p-4 md:p-6 lg:p-8 max-w-[1920px]">
             {/* Header */}
             <div className="mb-8">
-              <h1 className={`text-2xl font-semibold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Oylik Hisobotlar</h1>
-              <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Filial va xodim bo'yicha batafsil hisobot</p>
+              <h1 className={`text-2xl font-semibold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                {selectedDay ? 'Kunlik Hisobot' : 'Oylik Hisobotlar'}
+              </h1>
+              <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                {selectedDay 
+                  ? `${formatUzbekDate(selectedDay)} - Kunlik hisobot` 
+                  : 'Filial va xodim bo\'yicha batafsil hisobot'}
+              </p>
             </div>
 
             {/* Step 1: Filiallarni tanlash */}
@@ -3321,7 +3413,7 @@ export default function App() {
             </div>
 
             {/* Step 2: Xodim va Oy tanlash */}
-            <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className={`block text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>2. Xodimni tanlang</label>
                 <div className="flex gap-3">
@@ -3369,7 +3461,8 @@ export default function App() {
                   value={selectedMonth}
                   onChange={(e) => {
                     setSelectedMonth(e.target.value);
-                    if (selectedEmployee) {
+                    setSelectedDay(""); // Oyni o'zgartirganda kunni tozalaymiz
+                    if (selectedEmployee || showAllEmployees) {
                       loadMonthlyReports(currentBranch._id, e.target.value);
                     }
                   }}
@@ -3388,6 +3481,48 @@ export default function App() {
                     return <option key={value} value={value}>{label}</option>;
                   })}
                 </select>
+              </div>
+
+              <div>
+                <label className={`block text-sm font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>4. Kunni tanlang (ixtiyoriy)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={selectedDay}
+                    min={`${selectedMonth}-01`}
+                    max={`${selectedMonth}-${new Date(parseInt(selectedMonth.split('-')[0]), parseInt(selectedMonth.split('-')[1]), 0).getDate()}`}
+                    onChange={(e) => {
+                      setSelectedDay(e.target.value);
+                      if (selectedEmployee || showAllEmployees) {
+                        loadMonthlyReports(currentBranch._id, selectedMonth, e.target.value || undefined);
+                      }
+                    }}
+                    className={`flex-1 px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F87819] focus:border-[#F87819] font-medium ${
+                      isDarkMode 
+                        ? 'border-gray-700 bg-gray-800 text-white' 
+                        : 'border-gray-300 bg-white text-gray-900'
+                    }`}
+                  />
+                  {selectedDay && (
+                    <button
+                      onClick={() => {
+                        setSelectedDay("");
+                        if (selectedEmployee || showAllEmployees) {
+                          loadMonthlyReports(currentBranch._id, selectedMonth);
+                        }
+                      }}
+                      className="px-4 py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors"
+                      title="Kunni tozalash"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {selectedDay ? `Tanlangan: ${formatUzbekDate(selectedDay)}` : 'Butun oy hisoboti'}
+                </p>
               </div>
             </div>
 
@@ -3423,8 +3558,12 @@ export default function App() {
               return (
                 <div className={`rounded-xl border-2 overflow-hidden ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <div className="px-6 py-4 bg-gradient-to-r from-[#F87819] to-[#ff8c3a]">
-                    <h2 className="text-xl font-bold text-white">Barcha xodimlar hisoboti</h2>
-                    <p className="text-sm text-white/80 mt-1">{currentBranch.name} - {selectedMonth}</p>
+                    <h2 className="text-xl font-bold text-white">
+                      {selectedDay ? 'Kunlik Hisobot - Barcha xodimlar' : 'Barcha xodimlar hisoboti'}
+                    </h2>
+                    <p className="text-sm text-white/80 mt-1">
+                      {currentBranch.name} - {selectedDay ? formatUzbekDate(selectedDay) : selectedMonth}
+                    </p>
                   </div>
 
                   <div className="overflow-x-auto">
@@ -3524,6 +3663,16 @@ export default function App() {
 
               return (
                 <div className="space-y-6">
+                  {/* Sarlavha */}
+                  <div className={`rounded-xl p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} border-2 border-[#F87819]`}>
+                    <h2 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                      {selectedDay ? 'Kunlik Hisobot' : 'Oylik Hisobot'}
+                    </h2>
+                    <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                      {currentBranch.name} - {selectedDay ? formatUzbekDate(selectedDay) : selectedMonth}
+                    </p>
+                  </div>
+
                   {/* Xodim ma'lumotlari */}
                   <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 text-white shadow-2xl">
                     <div className="flex items-center gap-6 mb-6">
@@ -3903,7 +4052,7 @@ export default function App() {
             )}
           </div>
         )}
-      </div>
+      </main>
 
       {/* Modal - Yangi Xodim */}
       {showAddEmployee && (

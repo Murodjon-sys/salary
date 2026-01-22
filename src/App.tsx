@@ -727,11 +727,19 @@ export default function App() {
       setTeamVolumeBonusInput("");
     }
     
-    // Jami savdodan ulush bonusini hisoblash (FAQAT CHAKANA SAVDO)
+    // Jami savdodan ulush bonusini hisoblash (CHAKANA va OPTOM)
     if (currentBranch) {
-      const retailSalesOnly = currentBranch.retailSales || 0; // Faqat chakana savdo
-      const salesSharePercentage = 0.5; // 0.5%
-      const totalShareBonus = (retailSalesOnly * salesSharePercentage) / 100;
+      const retailSalesOnly = currentBranch.retailSales || 0;
+      const wholesaleSalesOnly = currentBranch.wholesaleSales || 0;
+      const salesSharePercentage = 0.5;
+      
+      // Chakana savdodan to'liq 0.5%
+      const retailShareBonus = (retailSalesOnly * salesSharePercentage) / 100;
+      
+      // Optom savdodan yarim 0.5% (0.25%)
+      const wholesaleShareBonus = (wholesaleSalesOnly * salesSharePercentage) / 100 / 2;
+      
+      const totalShareBonus = retailShareBonus + wholesaleShareBonus;
       
       // MUHIM: Faqat kelgan (isPresent=true) sotuvchilar sonini hisoblash
       const presentSellersCount = currentBranch.employees.filter(emp => emp.position === 'sotuvchi' && emp.isPresent).length;
@@ -1212,9 +1220,8 @@ export default function App() {
     // MODALGA MOS: Vazifalar foizisiz, faqat bonuslar qo'shiladi
     // MUHIM: Sotuvchilar uchun baseSalary QOSHILMAYDI (faqat bonuslar)
     if (employee.position === "sotuvchi") {
-      // Sotuvchilar uchun: FAQAT personalBonus va teamVolumeBonus
-      // salesShareBonus QOSHILMAYDI (chunki teamVolumeBonus allaqachon o'z savdosidan hisoblangan)
-      return (employee.personalBonus || 0) + teamVolumeBonus;
+      // Sotuvchilar uchun: personalBonus + teamVolumeBonus + salesShareBonus
+      return (employee.personalBonus || 0) + teamVolumeBonus + salesShareBonus;
     } else {
       // Sotuvchi bo'lmagan xodimlar uchun: baseSalary + bonuslar
       return baseSalary + (employee.fixedBonus || 0) + (employee.personalBonus || 0) + salesShareBonus;
@@ -4622,6 +4629,17 @@ export default function App() {
                             </span>
                           </div>
                         )}
+                        {salesShareBonusInput && parseFloat(salesShareBonusInput.replace(/,/g, "")) > 0 && (
+                          <div className="flex justify-between items-center py-1">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                              Jami savdodan ulush (0.5%):
+                            </span>
+                            <span className="font-bold text-emerald-600">
+                              + {formatMoney(parseFloat(salesShareBonusInput.replace(/,/g, "")) || 0)}
+                            </span>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <>
@@ -4689,10 +4707,11 @@ export default function App() {
                       <span className="font-bold text-xl text-[#F87819]">
                         {formatMoney(
                           selectedEmployee.position === "sotuvchi" ? (
-                            // Sotuvchi uchun: faqat bonuslar (salesShareBonus yo'q!)
+                            // Sotuvchi uchun: faqat bonuslar (ikkalasi ham!)
                             (parseFloat(bonusInput.replace(/,/g, "")) || 0) +
                             (parseFloat(personalBonusInput.replace(/,/g, "")) || 0) +
-                            (parseFloat(teamVolumeBonusInput.replace(/,/g, "")) || 0)
+                            (parseFloat(teamVolumeBonusInput.replace(/,/g, "")) || 0) +
+                            (parseFloat(salesShareBonusInput.replace(/,/g, "")) || 0)
                           ) : (
                             // Boshqa xodimlar uchun: chakana + optom + bonuslar
                             ((parseFloat(dailySalesInput.replace(/,/g, "")) || 0) * selectedEmployee.percentage / 100) +
